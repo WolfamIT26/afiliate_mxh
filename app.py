@@ -65,7 +65,7 @@ def add_page(db, fields):
 
 def render(db, filters=None):
     return (
-        tasks.section(db) + activity.section(db) + page_section(db)
+        tasks.section(db, filters) + activity.section(db) + page_section(db)
         + catalog.section(db) + workflow.section(db, filters)
     )
 
