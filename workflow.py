@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from html import escape
 
+import activity
 import reels
 
 VIETNAM_TIME = timezone(timedelta(hours=7))
@@ -25,8 +26,11 @@ def add_post(db, fields):
     body = fields.get("body", "").strip()
     if not 1 <= len(body) <= 5000:
         raise ValueError("Nội dung cần từ 1 đến 5000 ký tự.")
-    db.execute("INSERT INTO posts(page_id, product_id, body) VALUES (?, ?, ?)",
-               (fields.get("page_id"), fields.get("product_id") or None, body))
+    result = db.execute(
+        "INSERT INTO posts(page_id, product_id, body) VALUES (?, ?, ?)",
+        (fields.get("page_id"), fields.get("product_id") or None, body),
+    )
+    activity.record(db, result.lastrowid, "draft_created")
 
 
 def approve(db, fields):
@@ -34,6 +38,7 @@ def approve(db, fields):
                         (fields.get("id"),))
     if result.rowcount != 1:
         raise ValueError("Chỉ duyệt được bài đang ở trạng thái bản nháp.")
+    activity.record(db, fields["id"], "post_approved")
 
 
 def schedule(db, fields):
@@ -50,6 +55,7 @@ def schedule(db, fields):
     """, (local.astimezone(timezone.utc).isoformat(), fields.get("id")))
     if result.rowcount != 1:
         raise ValueError("Chỉ lên lịch được bài đã duyệt.")
+    activity.record(db, fields["id"], "post_scheduled")
 
 
 def options(choices, selected=None):

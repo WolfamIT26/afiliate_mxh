@@ -1,5 +1,7 @@
 from html import escape
 
+import activity
+
 MAX_SCENES = 12
 
 
@@ -35,6 +37,7 @@ def add_scene(db, fields):
     """, (prompt, seconds, post_id, MAX_SCENES))
     if result.rowcount != 1:
         raise ValueError("Chỉ thêm cảnh vào bản nháp và tối đa 12 cảnh mỗi bài.")
+    activity.record(db, post_id, "scene_added")
 
 
 def render_plan(db, post_id, status):

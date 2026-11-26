@@ -5,6 +5,7 @@ from html import escape
 from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
+import activity
 import catalog
 import profiles
 import reels
@@ -39,6 +40,7 @@ def initialize():
         catalog.initialize(db)
         workflow.initialize(db)
         reels.initialize(db)
+        activity.initialize(db)
 
 
 def page_section(db):
@@ -60,7 +62,7 @@ def add_page(db, fields):
 
 
 def render(db, filters=None):
-    return page_section(db) + catalog.section(db) + workflow.section(db, filters)
+    return activity.section(db) + page_section(db) + catalog.section(db) + workflow.section(db, filters)
 
 
 ACTIONS = {
