@@ -21,3 +21,9 @@ Tạo bản nháp, mở **Thêm cảnh Reel 9:16** rồi nhập prompt và thờ
 ### Ví dụ bàn giao cho agent
 
 Với Tủ Đồ Hay, xác nhận sản phẩm, ảnh gốc và link affiliate trước khi soạn cảnh. Khi mô tả cảnh, ghi hành động, góc máy và chi tiết phải giữ nguyên để video thể hiện đúng sản phẩm. Sau khi có clip, đối chiếu lại clip với ảnh gốc và link trước khi duyệt. Nếu thiếu ảnh gốc hoặc nhận ra sản phẩm sai, chuyển lại bước chọn sản phẩm.
+
+## Nhập và ghép clip Reel
+
+Cài FFmpeg và FFprobe rồi chạy app như bình thường. Trong bản nháp, nhập một MP4 dọc 9:16 cho mỗi cảnh. Khi đã đủ clip, chọn **Tải Reel MP4 không âm thanh**. Bản tải ghép theo thứ tự cảnh hiện tại. Soát lại thời lượng và ghép âm thanh bên ngoài trước khi đăng.
+
+App lưu clip trong thư mục `media/` hoặc đường dẫn `AFFILIATE_MEDIA_DIR`. Chế độ này dùng tệp bạn cung cấp. Kết nối API tạo clip và đăng Facebook cần thực hiện riêng.

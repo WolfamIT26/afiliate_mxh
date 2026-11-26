@@ -11,6 +11,8 @@ import activity
 import catalog
 import profiles
 import reels
+import reel_media
+import media_routes
 import tasks
 import workflow
 
@@ -44,6 +46,7 @@ def initialize():
         catalog.initialize(db)
         workflow.initialize(db)
         reels.initialize(db)
+        reel_media.initialize(db)
         activity.initialize(db)
         tasks.initialize(db)
 
@@ -139,6 +142,12 @@ article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anyw
             content_type="application/json; charset=utf-8",
         )
 
+    if method == "POST" and path == "/reels/clip":
+        return media_routes.upload(environ, start_response, database, response)
+    if method == "POST" and path == "/reels/clip/remove":
+        return media_routes.remove(environ, start_response, database, response)
+    if method == "POST" and path == "/reels/render":
+        return media_routes.export(environ, start_response, database, response)
     if method == "POST" and path in ACTIONS:
         try:
             length = int(environ.get("CONTENT_LENGTH") or 0)

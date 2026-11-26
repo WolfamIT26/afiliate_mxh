@@ -56,6 +56,8 @@ def edit_scene(db, fields):
 
 
 def delete_scene(db, fields):
+    if db.execute("SELECT scene_id FROM scene_assets WHERE scene_id = ?", (fields.get("id"),)).fetchone():
+        raise ValueError("Gỡ clip trước khi xóa cảnh.")
     result = db.execute("""
         DELETE FROM reel_scenes
         WHERE id = ? AND post_id IN (SELECT id FROM posts WHERE status = 'draft')
@@ -149,12 +151,29 @@ def scene_item(row, editable, can_move_up, can_move_down):
                     {"".join(moves)}
                 </form>
             """
+    if row["filename"]:
+        controls += f'<p>Đã nhập clip · {row["width"]} × {row["height"]} · {row["duration_ms"] / 1000:g} giây</p>'
+        if editable:
+            controls += f"""
+                <form method="post" action="/reels/clip/remove?scene_id={scene_id}">
+                    <button>Gỡ clip</button>
+                </form>
+            """
+    elif editable:
+        controls += f"""
+            <form method="post" enctype="multipart/form-data" action="/reels/clip?scene_id={scene_id}">
+                <label>Clip MP4 9:16 <input type="file" name="clip" accept=".mp4,video/mp4" required></label>
+                <button>Nhập clip</button>
+            </form>
+        """
     return f"<li>{prompt} <small>({seconds} giây)</small>{controls}</li>"
 
 
 def render_plan(db, post_id, status):
     rows = db.execute("""
-        SELECT id, prompt, seconds FROM reel_scenes WHERE post_id = ? ORDER BY position
+        SELECT reel_scenes.id, prompt, seconds, filename, width, height, duration_ms
+        FROM reel_scenes LEFT JOIN scene_assets ON scene_assets.scene_id = reel_scenes.id
+        WHERE post_id = ? ORDER BY position
     """, (post_id,)).fetchall()
     content = ""
     if rows:
@@ -164,6 +183,12 @@ def render_plan(db, post_id, status):
             for index, row in enumerate(rows)
         )
         content = f"<h4>Kế hoạch Reel 9:16 · {total} giây</h4><ol>{scenes}</ol>"
+    if rows and all(row["filename"] for row in rows):
+        content += f"""
+            <form method="post" action="/reels/render?post_id={post_id}">
+                <button>Tải Reel MP4 không âm thanh</button>
+            </form>
+        """
     if status == "draft":
         content += f"""
             <details><summary>Thêm cảnh Reel 9:16</summary>
