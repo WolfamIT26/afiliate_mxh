@@ -58,8 +58,8 @@ def add_page(db, fields):
     db.execute("INSERT INTO pages(name) VALUES (?)", (name,))
 
 
-def render(db):
-    return page_section(db) + catalog.section(db) + workflow.section(db)
+def render(db, filters=None):
+    return page_section(db) + catalog.section(db) + workflow.section(db, filters)
 
 
 ACTIONS = {
@@ -81,8 +81,9 @@ def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
     if method == "GET" and path == "/":
+        filters = parse_qs(environ.get("QUERY_STRING", ""))
         with database() as db:
-            content = render(db)
+            content = render(db, filters)
         return response(start_response, "200 OK", f"""<!doctype html>
 <html lang="vi"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

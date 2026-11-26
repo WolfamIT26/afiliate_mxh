@@ -52,9 +52,12 @@ def schedule(db, fields):
         raise ValueError("Chỉ lên lịch được bài đã duyệt.")
 
 
-def options(rows):
-    return "".join(f'<option value="{row["id"]}">{escape(row["name"])}</option>'
-                   for row in rows)
+def options(choices, selected=None):
+    items = []
+    for value, label in choices:
+        selection = " selected" if value == selected else ""
+        items.append(f'<option value="{escape(str(value))}"{selection}>{escape(label)}</option>')
+    return "".join(items)
 
 
 def post_card(db, row):
@@ -80,15 +83,30 @@ def post_card(db, row):
     """
 
 
-def section(db):
-    pages = options(db.execute("SELECT id, name FROM pages ORDER BY id"))
+def section(db, filters=None):
+    filters = filters or {}
+    page_choices = list(db.execute("SELECT id, name FROM pages ORDER BY id"))
+    pages_by_value = {str(row["id"]): row["id"] for row in page_choices}
+    page_id = pages_by_value.get(filters.get("page_id", [""])[-1])
+    status = filters.get("status", [""])[-1]
+    if status not in STATUS_LABELS:
+        status = None
+
+    pages = options(page_choices, page_id)
+    filter_pages = options([("", "Tất cả Fanpage"), *page_choices],
+                           page_id if page_id is not None else "")
+    filter_statuses = options([("", "Tất cả trạng thái"), *STATUS_LABELS.items()],
+                              status or "")
     products = options(db.execute("SELECT id, name FROM products ORDER BY name"))
     posts = "".join(post_card(db, row) for row in db.execute("""
         SELECT posts.*, pages.name AS page, products.name AS product
         FROM posts JOIN pages ON pages.id = posts.page_id
         LEFT JOIN products ON products.id = posts.product_id
+        WHERE (? IS NULL OR posts.page_id = ?) AND (? IS NULL OR posts.status = ?)
         ORDER BY posts.id DESC
-    """))
+    """, (page_id, page_id, status, status)))
+    if not posts:
+        posts = "<p>Chưa có bài viết phù hợp.</p>"
     return f"""
         <section><h2>Bài viết</h2>
         <p>Lịch được lưu tại đây. Tính năng đăng lên Facebook chưa được kết nối.</p>
@@ -97,5 +115,13 @@ def section(db):
             <label>Sản phẩm <select name="product_id"><option value="">Không gắn</option>{products}</select></label>
             <label>Nội dung <textarea name="body" required maxlength="5000" rows="4"></textarea></label>
             <button>Tạo bản nháp</button>
-        </form>{posts}</section>
+        </form>
+        <h3>Danh sách bài viết</h3>
+        <form method="get" action="/">
+            <label>Lọc theo Fanpage <select name="page_id">{filter_pages}</select></label>
+            <label>Lọc theo trạng thái <select name="status">{filter_statuses}</select></label>
+            <button>Lọc bài viết</button>
+            <a href="/">Xóa bộ lọc</a>
+        </form>
+        {posts}</section>
     """
