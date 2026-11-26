@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 import catalog
+import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
 SEED_PAGES = ("Trạm AI", "Tủ Đồ Hay", "Có Gì Hay")
@@ -33,6 +34,7 @@ def initialize():
         db.executemany("INSERT OR IGNORE INTO pages(name) VALUES (?)",
                        [(name,) for name in SEED_PAGES])
         catalog.initialize(db)
+        workflow.initialize(db)
 
 
 def page_section(db):
@@ -55,10 +57,16 @@ def add_page(db, fields):
 
 
 def render(db):
-    return page_section(db) + catalog.section(db)
+    return page_section(db) + catalog.section(db) + workflow.section(db)
 
 
-ACTIONS = {"/pages": add_page, "/products": catalog.add_product}
+ACTIONS = {
+    "/pages": add_page,
+    "/products": catalog.add_product,
+    "/posts": workflow.add_post,
+    "/posts/approve": workflow.approve,
+    "/posts/schedule": workflow.schedule,
+}
 
 
 def response(start_response, status, content, headers=()):
