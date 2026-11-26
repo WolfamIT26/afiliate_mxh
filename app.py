@@ -79,6 +79,7 @@ ACTIONS = {
     "/posts": workflow.add_post,
     "/reels/scenes": reels.add_scene,
     "/reels/scenes/edit": reels.edit_scene,
+    "/reels/scenes/move": reels.move_scene,
     "/reels/scenes/delete": reels.delete_scene,
     "/posts/approve": workflow.approve,
     "/posts/schedule": workflow.schedule,
