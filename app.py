@@ -2,6 +2,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from html import escape
+from pathlib import Path
 from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
@@ -14,6 +15,7 @@ import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
 SEED_PAGES = ("Trạm AI", "Tủ Đồ Hay", "Có Gì Hay")
+PLAYBOOK_PATH = Path(__file__).resolve().parent / "docs" / "agent-playbook.md"
 
 
 @contextmanager
@@ -93,24 +95,34 @@ def response(start_response, status, content, headers=()):
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
-    if method == "GET" and path == "/":
-        filters = parse_qs(environ.get("QUERY_STRING", ""))
-        with database() as db:
-            content = render(db, filters)
+    if method == "GET" and path in ("/", "/knowledge"):
+        if path == "/knowledge":
+            page_title = "Sổ tay Agent"
+            navigation = '<a href="/">Về dashboard</a>'
+            playbook = escape(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+            content = f'<section><pre class="playbook">{playbook}</pre></section>'
+        else:
+            page_title = "Affiliate MXH"
+            navigation = '<a href="/knowledge">Sổ tay Agent</a>'
+            filters = parse_qs(environ.get("QUERY_STRING", ""))
+            with database() as db:
+                content = render(db, filters)
         return response(start_response, "200 OK", f"""<!doctype html>
 <html lang="vi"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Affiliate MXH</title>
+<title>{page_title}</title>
 <style>
 body {{ margin: 2rem auto; padding: 0 1rem; max-width: 64rem; background: #f2f5f2;
         color: #142b22; font: 1rem/1.5 system-ui, sans-serif; }}
 section {{ background: white; padding: 1.25rem; border-radius: .75rem; margin-bottom: 1rem; }}
+nav {{ margin-bottom: 1rem; }}
+.playbook {{ font: inherit; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }}
 h2 {{ margin-top: 0; }} label {{ display: block; margin-bottom: .75rem; }}
 input, select, textarea, button {{ font: inherit; padding: .4rem; max-width: 100%; }}
 button {{ color: white; background: #18563f; border: 0; border-radius: .3rem; cursor: pointer; }}
 article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anywhere; }}
 </style>
-<main><h1>Affiliate MXH</h1>{content}</main></html>""")
+<main><h1>{page_title}</h1><nav>{navigation}</nav>{content}</main></html>""")
 
     if method == "POST" and path in ACTIONS:
         try:
