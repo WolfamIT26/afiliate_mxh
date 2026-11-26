@@ -18,7 +18,7 @@ def initialize(db):
     """)
 
 
-def add_scene(db, fields):
+def scene_values(fields):
     prompt = fields.get("prompt", "").strip()
     try:
         seconds = int(fields.get("seconds", ""))
@@ -26,6 +26,11 @@ def add_scene(db, fields):
         raise ValueError("Thời lượng cảnh phải là số nguyên.") from None
     if not 1 <= len(prompt) <= 2000 or not 1 <= seconds <= 30:
         raise ValueError("Nhập mô tả 1–2000 ký tự và thời lượng 1–30 giây.")
+    return prompt, seconds
+
+
+def add_scene(db, fields):
+    prompt, seconds = scene_values(fields)
     post_id = fields.get("post_id")
     result = db.execute("""
         INSERT INTO reel_scenes(post_id, position, prompt, seconds)
@@ -40,17 +45,58 @@ def add_scene(db, fields):
     activity.record(db, post_id, "scene_added")
 
 
+def edit_scene(db, fields):
+    prompt, seconds = scene_values(fields)
+    result = db.execute("""
+        UPDATE reel_scenes SET prompt = ?, seconds = ?
+        WHERE id = ? AND post_id IN (SELECT id FROM posts WHERE status = 'draft')
+    """, (prompt, seconds, fields.get("id")))
+    if result.rowcount != 1:
+        raise ValueError("Chỉ sửa được cảnh thuộc bản nháp.")
+
+
+def delete_scene(db, fields):
+    result = db.execute("""
+        DELETE FROM reel_scenes
+        WHERE id = ? AND post_id IN (SELECT id FROM posts WHERE status = 'draft')
+    """, (fields.get("id"),))
+    if result.rowcount != 1:
+        raise ValueError("Chỉ xóa được cảnh thuộc bản nháp.")
+
+
+def scene_item(row, editable):
+    prompt = escape(row["prompt"])
+    seconds = row["seconds"]
+    scene_id = row["id"]
+    controls = ""
+    if editable:
+        controls = f"""
+            <details><summary>Sửa hoặc xóa cảnh</summary>
+                <form method="post" action="/reels/scenes/edit">
+                    <input type="hidden" name="id" value="{scene_id}">
+                    <label>Prompt hoặc mô tả cảnh
+                        <textarea name="prompt" maxlength="2000" required>{prompt}</textarea>
+                    </label>
+                    <label>Thời lượng (giây)
+                        <input name="seconds" type="number" min="1" max="30" value="{seconds}" required>
+                    </label>
+                    <button>Lưu thay đổi</button>
+                    <button formaction="/reels/scenes/delete" formnovalidate
+                        onclick="return confirm('Xóa cảnh này khỏi bản nháp?')">Xóa cảnh</button>
+                </form>
+            </details>
+        """
+    return f"<li>{prompt} <small>({seconds} giây)</small>{controls}</li>"
+
+
 def render_plan(db, post_id, status):
     rows = db.execute("""
-        SELECT prompt, seconds FROM reel_scenes WHERE post_id = ? ORDER BY position
+        SELECT id, prompt, seconds FROM reel_scenes WHERE post_id = ? ORDER BY position
     """, (post_id,)).fetchall()
     content = ""
     if rows:
         total = sum(row["seconds"] for row in rows)
-        scenes = "".join(
-            f'<li>{escape(row["prompt"])} <small>({row["seconds"]} giây)</small></li>'
-            for row in rows
-        )
+        scenes = "".join(scene_item(row, status == "draft") for row in rows)
         content = f"<h4>Kế hoạch Reel 9:16 · {total} giây</h4><ol>{scenes}</ol>"
     if status == "draft":
         content += f"""
