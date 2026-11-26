@@ -1,0 +1,111 @@
+import json
+import os
+import re
+import sqlite3
+import subprocess
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from uuid import uuid4
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+FFPROBE_TIMEOUT = 10
+
+
+def initialize(db):
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS scene_assets (
+            scene_id INTEGER PRIMARY KEY REFERENCES reel_scenes(id) ON DELETE CASCADE,
+            filename TEXT NOT NULL UNIQUE,
+            width INTEGER NOT NULL CHECK (width > 0),
+            height INTEGER NOT NULL CHECK (height > 0),
+            duration_ms INTEGER NOT NULL CHECK (duration_ms > 0)
+        )
+    """)
+
+
+def get(db, scene_id):
+    return db.execute("""
+        SELECT filename, width, height, duration_ms FROM scene_assets WHERE scene_id = ?
+    """, (scene_id,)).fetchone()
+
+
+def media_path(filename):
+    if not re.fullmatch(r"[a-f0-9]{32}\.mp4", filename):
+        raise ValueError("Tên tệp video không hợp lệ.")
+    return Path(os.environ.get("AFFILIATE_MEDIA_DIR") or "media") / filename
+
+
+def probe(path):
+    try:
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-max_alloc", "33554432",
+            "-protocol_whitelist", "file", "-f", "mov", "-enable_drefs", "0",
+            "-select_streams", "v:0",
+            "-show_entries",
+            "stream=width,height,sample_aspect_ratio,duration:"
+            "stream_disposition=attached_pic:stream_side_data=rotation:"
+            "format_tags=major_brand",
+            "-of", "json", "-i", str(path.absolute()),
+        ], check=True, capture_output=True, timeout=FFPROBE_TIMEOUT)
+    except FileNotFoundError:
+        raise ValueError("Máy chủ cần cài ffprobe để kiểm tra video.") from None
+    except subprocess.TimeoutExpired:
+        raise ValueError("Kiểm tra video quá thời gian cho phép.") from None
+    except subprocess.CalledProcessError:
+        raise ValueError("Không đọc được tệp video MP4.") from None
+
+    try:
+        metadata = json.loads(result.stdout)
+        video = metadata["streams"][0]
+        brand = metadata["format"]["tags"]["major_brand"]
+        if not (brand.startswith(("iso", "mp4", "avc", "M4V")) or brand == "MSNV"):
+            raise ValueError
+        if video.get("disposition", {}).get("attached_pic"):
+            raise ValueError
+        width = int(video["width"])
+        height = int(video["height"])
+        duration = Decimal(video["duration"])
+        if not duration.is_finite() or duration <= 0:
+            raise ValueError
+        duration_ms = int(duration * 1000)
+        if duration_ms < 1 or duration_ms > 2**63 - 1:
+            raise ValueError
+        rotation = any(item.get("rotation", 0) % 360 for item in video.get("side_data_list", []))
+    except (KeyError, IndexError, TypeError, ValueError, InvalidOperation, OverflowError):
+        raise ValueError("Tệp phải là MP4 có luồng video và thời lượng hợp lệ.") from None
+    if (
+        width <= 0
+        or height <= 0
+        or width * 16 != height * 9
+        or rotation
+        or video.get("sample_aspect_ratio", "N/A") not in {"1:1", "N/A"}
+    ):
+        raise ValueError("Video phải có khung hình dọc 9:16, pixel vuông và không cần xoay.")
+    return width, height, duration_ms
+
+
+def attach(db, scene_id, data):
+    if not 1 <= len(data) <= MAX_UPLOAD_BYTES:
+        raise ValueError("Tệp video phải có dung lượng từ 1 byte đến 25 MiB.")
+    filename = uuid4().hex + ".mp4"
+    path = media_path(filename)
+    created = False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("xb") as video_file:
+            created = True
+            video_file.write(data)
+        width, height, duration_ms = probe(path)
+        result = db.execute("""
+            INSERT INTO scene_assets(scene_id, filename, width, height, duration_ms)
+            SELECT reel_scenes.id, ?, ?, ?, ?
+            FROM reel_scenes JOIN posts ON posts.id = reel_scenes.post_id
+            WHERE reel_scenes.id = ? AND posts.status = 'draft'
+            ON CONFLICT(scene_id) DO NOTHING
+        """, (filename, width, height, duration_ms, scene_id))
+        if result.rowcount != 1:
+            raise ValueError("Chỉ đính kèm một MP4 vào cảnh thuộc bản nháp.")
+    except (ValueError, OSError, sqlite3.Error):
+        if created:
+            path.unlink(missing_ok=True)
+        raise
