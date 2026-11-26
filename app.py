@@ -1,7 +1,9 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
 from html import escape
+from pathlib import Path
 from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
@@ -14,6 +16,7 @@ import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
 SEED_PAGES = ("Trạm AI", "Tủ Đồ Hay", "Có Gì Hay")
+PLAYBOOK_PATH = Path(__file__).resolve().parent / "docs" / "agent-playbook.md"
 
 
 @contextmanager
@@ -65,7 +68,7 @@ def add_page(db, fields):
 
 def render(db, filters=None):
     return (
-        tasks.section(db) + activity.section(db) + page_section(db)
+        tasks.section(db, filters) + activity.section(db) + page_section(db)
         + catalog.section(db) + workflow.section(db, filters)
     )
 
@@ -79,38 +82,62 @@ ACTIONS = {
     "/posts": workflow.add_post,
     "/reels/scenes": reels.add_scene,
     "/reels/scenes/edit": reels.edit_scene,
+    "/reels/scenes/move": reels.move_scene,
     "/reels/scenes/delete": reels.delete_scene,
     "/posts/approve": workflow.approve,
     "/posts/schedule": workflow.schedule,
 }
 
 
-def response(start_response, status, content, headers=()):
-    start_response(status, [("Content-Type", "text/html; charset=utf-8"), *headers])
+def response(start_response, status, content, headers=(), content_type="text/html; charset=utf-8"):
+    start_response(status, [("Content-Type", content_type), *headers])
     return [content.encode("utf-8")]
 
 
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
-    if method == "GET" and path == "/":
-        filters = parse_qs(environ.get("QUERY_STRING", ""))
-        with database() as db:
-            content = render(db, filters)
+    if method == "GET" and path in ("/", "/knowledge"):
+        if path == "/knowledge":
+            page_title = "Sổ tay Agent"
+            navigation = '<a href="/">Về dashboard</a>'
+            playbook = escape(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+            content = f'<section><pre class="playbook">{playbook}</pre></section>'
+        else:
+            page_title = "Affiliate MXH"
+            navigation = '<a href="/knowledge">Sổ tay Agent</a>'
+            filters = parse_qs(environ.get("QUERY_STRING", ""))
+            with database() as db:
+                content = render(db, filters)
         return response(start_response, "200 OK", f"""<!doctype html>
 <html lang="vi"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Affiliate MXH</title>
+<title>{page_title}</title>
 <style>
 body {{ margin: 2rem auto; padding: 0 1rem; max-width: 64rem; background: #f2f5f2;
         color: #142b22; font: 1rem/1.5 system-ui, sans-serif; }}
 section {{ background: white; padding: 1.25rem; border-radius: .75rem; margin-bottom: 1rem; }}
+nav {{ margin-bottom: 1rem; }}
+.playbook {{ font: inherit; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }}
 h2 {{ margin-top: 0; }} label {{ display: block; margin-bottom: .75rem; }}
 input, select, textarea, button {{ font: inherit; padding: .4rem; max-width: 100%; }}
 button {{ color: white; background: #18563f; border: 0; border-radius: .3rem; cursor: pointer; }}
 article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anywhere; }}
 </style>
-<main><h1>Affiliate MXH</h1>{content}</main></html>""")
+<main><h1>{page_title}</h1><nav>{navigation}</nav>{content}</main></html>""")
+
+    if method == "GET" and path == "/reels/brief":
+        post_id = parse_qs(environ.get("QUERY_STRING", "")).get("post_id", [""])[-1]
+        with database() as db:
+            brief = workflow.reel_brief(db, post_id)
+        if brief is None:
+            return response(start_response, "404 Not Found", "Không tìm thấy bài viết.")
+        return response(
+            start_response, "200 OK", json.dumps(brief, ensure_ascii=False, indent=2) + "\n",
+            [("Content-Disposition", f'attachment; filename="reel-brief-{brief["post_id"]}.json"'),
+             ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")],
+            content_type="application/json; charset=utf-8",
+        )
 
     if method == "POST" and path in ACTIONS:
         try:

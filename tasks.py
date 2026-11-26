@@ -85,26 +85,51 @@ def transition_form(task_id, target, label):
     """
 
 
-def section(db):
-    pages = "".join(
-        f'<option value="{row["id"]}">{escape(row["name"])}</option>'
-        for row in db.execute("SELECT id, name FROM pages ORDER BY id")
-    )
+def options(choices, selected=""):
+    html = []
+    for value, label in choices:
+        marker = " selected" if value == selected else ""
+        html.append(f'<option value="{escape(value)}"{marker}>{escape(label)}</option>')
+    return "".join(html)
+
+
+def section(db, filters=None):
+    filters = filters or {}
+    page_choices = [(str(row["id"]), row["name"])
+                    for row in db.execute("SELECT id, name FROM pages ORDER BY id")]
+    page = filters.get("task_page", [""])[-1]
+    if page != "project" and page not in dict(page_choices):
+        page = ""
+    status = filters.get("task_status", [""])[-1]
+    if status not in STATUS_LABELS:
+        status = ""
+
+    pages = options([("", "Toàn dự án"), *page_choices])
+    filter_pages = options([("", "Tất cả Fanpage"), ("project", "Toàn dự án"), *page_choices], page)
+    filter_statuses = options([("", "Tất cả trạng thái"), *STATUS_LABELS.items()], status)
     cards = "".join(task_card(row) for row in db.execute("""
         SELECT work_tasks.*, pages.name AS page
         FROM work_tasks LEFT JOIN pages ON pages.id = work_tasks.page_id
+        WHERE (? = '' OR (? = 'project' AND work_tasks.page_id IS NULL) OR work_tasks.page_id = ?)
+          AND (? = '' OR work_tasks.status = ?)
         ORDER BY work_tasks.status = 'done', work_tasks.id DESC
-    """))
+    """, (page, page, page, status, status)))
     return f"""
-        <section>
+        <section id="work-tasks">
             <h2>Phiếu công việc</h2>
             <p>Trạng thái do người dùng cập nhật trên dashboard.</p>
             <form method="post" action="/tasks">
                 <label>Tên việc <input name="title" required maxlength="160"></label>
                 <label>Người hoặc nhóm phụ trách <input name="assignee" required maxlength="100"></label>
-                <label>Fanpage <select name="page_id"><option value="">Toàn dự án</option>{pages}</select></label>
+                <label>Fanpage <select name="page_id">{pages}</select></label>
                 <button>Tạo phiếu</button>
             </form>
-            {cards or "<p>Chưa có phiếu công việc.</p>"}
+            <form method="get" action="/#work-tasks">
+                <label>Lọc phiếu theo Fanpage <select name="task_page">{filter_pages}</select></label>
+                <label>Lọc phiếu theo trạng thái <select name="task_status">{filter_statuses}</select></label>
+                <button>Lọc phiếu</button>
+                <a href="/#work-tasks">Xóa bộ lọc phiếu</a>
+            </form>
+            {cards or "<p>Chưa có phiếu công việc phù hợp.</p>"}
         </section>
     """

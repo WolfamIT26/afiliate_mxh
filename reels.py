@@ -64,7 +64,58 @@ def delete_scene(db, fields):
         raise ValueError("Chỉ xóa được cảnh thuộc bản nháp.")
 
 
-def scene_item(row, editable):
+def move_scene(db, fields):
+    direction = fields.get("direction")
+    if direction not in ("up", "down"):
+        raise ValueError("Chọn đưa cảnh lên hoặc xuống.")
+
+    comparison, order = ("<", "DESC") if direction == "up" else (">", "ASC")
+    pair = db.execute(f"""
+        SELECT current.id, current.position, neighbor.id AS neighbor_id,
+               neighbor.position AS neighbor_position
+        FROM reel_scenes AS current
+        JOIN posts ON posts.id = current.post_id
+        JOIN reel_scenes AS neighbor
+            ON neighbor.post_id = current.post_id
+            AND neighbor.position {comparison} current.position
+        WHERE current.id = ? AND posts.status = 'draft'
+        ORDER BY neighbor.position {order}
+        LIMIT 1
+    """, (fields.get("id"),)).fetchone()
+    if pair is None:
+        raise ValueError("Cảnh phải thuộc bản nháp và có cảnh liền kề theo hướng đã chọn.")
+
+    # Park the scene in an unused slot before swapping the two unique positions.
+    result = db.execute(f"""
+        UPDATE reel_scenes
+        SET position = (
+            SELECT COALESCE(MAX(other.position), 0) + 1 FROM reel_scenes AS other
+            WHERE other.post_id = reel_scenes.post_id
+        )
+        WHERE id = ? AND position = ?
+            AND post_id IN (SELECT id FROM posts WHERE status = 'draft')
+            AND ? = (
+                SELECT neighbor.id FROM reel_scenes AS neighbor
+                WHERE neighbor.post_id = reel_scenes.post_id
+                    AND neighbor.position {comparison} reel_scenes.position
+                ORDER BY neighbor.position {order}
+                LIMIT 1
+            )
+            AND EXISTS (
+                SELECT 1 FROM reel_scenes AS neighbor
+                WHERE neighbor.id = ? AND neighbor.position = ?
+            )
+    """, (pair["id"], pair["position"], pair["neighbor_id"],
+           pair["neighbor_id"], pair["neighbor_position"]))
+    if result.rowcount != 1:
+        raise ValueError("Thứ tự cảnh đã thay đổi. Mở lại bản nháp rồi thử lại.")
+    db.execute("UPDATE reel_scenes SET position = ? WHERE id = ?",
+               (pair["position"], pair["neighbor_id"]))
+    db.execute("UPDATE reel_scenes SET position = ? WHERE id = ?",
+               (pair["neighbor_position"], pair["id"]))
+
+
+def scene_item(row, editable, can_move_up, can_move_down):
     prompt = escape(row["prompt"])
     seconds = row["seconds"]
     scene_id = row["id"]
@@ -86,6 +137,18 @@ def scene_item(row, editable):
                 </form>
             </details>
         """
+        moves = []
+        if can_move_up:
+            moves.append('<button name="direction" value="up">Đưa lên</button>')
+        if can_move_down:
+            moves.append('<button name="direction" value="down">Đưa xuống</button>')
+        if moves:
+            controls += f"""
+                <form method="post" action="/reels/scenes/move">
+                    <input type="hidden" name="id" value="{scene_id}">
+                    {"".join(moves)}
+                </form>
+            """
     return f"<li>{prompt} <small>({seconds} giây)</small>{controls}</li>"
 
 
@@ -96,7 +159,10 @@ def render_plan(db, post_id, status):
     content = ""
     if rows:
         total = sum(row["seconds"] for row in rows)
-        scenes = "".join(scene_item(row, status == "draft") for row in rows)
+        scenes = "".join(
+            scene_item(row, status == "draft", index > 0, index < len(rows) - 1)
+            for index, row in enumerate(rows)
+        )
         content = f"<h4>Kế hoạch Reel 9:16 · {total} giây</h4><ol>{scenes}</ol>"
     if status == "draft":
         content += f"""
