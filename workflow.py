@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from html import escape
 
+import reels
+
 VIETNAM_TIME = timezone(timedelta(hours=7))
 STATUS_LABELS = {"draft": "Bản nháp", "approved": "Đã duyệt", "scheduled": "Đã lên lịch"}
 
@@ -55,7 +57,7 @@ def options(rows):
                    for row in rows)
 
 
-def post_card(row):
+def post_card(db, row):
     post_id = row["id"]
     action = ""
     if row["status"] == "draft":
@@ -74,14 +76,14 @@ def post_card(row):
     return f"""
         <article><strong>{escape(row["page"])} · {STATUS_LABELS[row["status"]]}</strong>
         <p style="white-space: pre-wrap">{escape(row["body"])}</p>
-        <p>{product}</p>{action}</article>
+        <p>{product}</p>{reels.render_plan(db, post_id, row["status"])}{action}</article>
     """
 
 
 def section(db):
     pages = options(db.execute("SELECT id, name FROM pages ORDER BY id"))
     products = options(db.execute("SELECT id, name FROM products ORDER BY name"))
-    posts = "".join(post_card(row) for row in db.execute("""
+    posts = "".join(post_card(db, row) for row in db.execute("""
         SELECT posts.*, pages.name AS page, products.name AS product
         FROM posts JOIN pages ON pages.id = posts.page_id
         LEFT JOIN products ON products.id = posts.product_id

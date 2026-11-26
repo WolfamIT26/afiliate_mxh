@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 import catalog
+import reels
 import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
@@ -35,6 +36,7 @@ def initialize():
                        [(name,) for name in SEED_PAGES])
         catalog.initialize(db)
         workflow.initialize(db)
+        reels.initialize(db)
 
 
 def page_section(db):
@@ -64,6 +66,7 @@ ACTIONS = {
     "/pages": add_page,
     "/products": catalog.add_product,
     "/posts": workflow.add_post,
+    "/reels/scenes": reels.add_scene,
     "/posts/approve": workflow.approve,
     "/posts/schedule": workflow.schedule,
 }
