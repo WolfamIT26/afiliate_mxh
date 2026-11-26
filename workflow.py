@@ -66,6 +66,41 @@ def options(choices, selected=None):
     return "".join(items)
 
 
+def reel_brief(db, post_id):
+    rows = db.execute("""
+        SELECT posts.id AS post_id, posts.body, posts.status,
+               pages.name AS page, products.name AS product, products.url AS affiliate_url,
+               reel_scenes.id AS scene_id, reel_scenes.prompt, reel_scenes.seconds
+        FROM posts JOIN pages ON pages.id = posts.page_id
+        LEFT JOIN products ON products.id = posts.product_id
+        LEFT JOIN reel_scenes ON reel_scenes.post_id = posts.id
+        WHERE posts.id = ?
+        ORDER BY reel_scenes.position
+    """, (post_id,)).fetchall()
+    if not rows:
+        return None
+
+    post = rows[0]
+    product = None
+    if post["product"] is not None:
+        product = {"name": post["product"], "affiliate_url": post["affiliate_url"]}
+    scene_rows = (row for row in rows if row["scene_id"] is not None)
+    scenes = [
+        {"position": position, "prompt": row["prompt"], "duration_seconds": row["seconds"]}
+        for position, row in enumerate(scene_rows, start=1)
+    ]
+    return {
+        "post_id": post["post_id"],
+        "status": post["status"],
+        "fanpage": post["page"],
+        "caption": post["body"],
+        "product": product,
+        "aspect_ratio": "9:16",
+        "total_duration_seconds": sum(scene["duration_seconds"] for scene in scenes),
+        "scenes": scenes,
+    }
+
+
 def post_card(db, row):
     post_id = row["id"]
     action = ""
@@ -85,7 +120,9 @@ def post_card(db, row):
     return f"""
         <article><strong>{escape(row["page"])} · {STATUS_LABELS[row["status"]]}</strong>
         <p style="white-space: pre-wrap">{escape(row["body"])}</p>
-        <p>{product}</p>{reels.render_plan(db, post_id, row["status"])}{action}</article>
+        <p>{product}</p>{reels.render_plan(db, post_id, row["status"])}
+        <p><a href="/reels/brief?post_id={post_id}">Tải kế hoạch Reel (JSON)</a></p>
+        {action}</article>
     """
 
 

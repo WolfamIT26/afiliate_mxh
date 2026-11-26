@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -85,8 +86,8 @@ ACTIONS = {
 }
 
 
-def response(start_response, status, content, headers=()):
-    start_response(status, [("Content-Type", "text/html; charset=utf-8"), *headers])
+def response(start_response, status, content, headers=(), content_type="text/html; charset=utf-8"):
+    start_response(status, [("Content-Type", content_type), *headers])
     return [content.encode("utf-8")]
 
 
@@ -111,6 +112,19 @@ button {{ color: white; background: #18563f; border: 0; border-radius: .3rem; cu
 article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anywhere; }}
 </style>
 <main><h1>Affiliate MXH</h1>{content}</main></html>""")
+
+    if method == "GET" and path == "/reels/brief":
+        post_id = parse_qs(environ.get("QUERY_STRING", "")).get("post_id", [""])[-1]
+        with database() as db:
+            brief = workflow.reel_brief(db, post_id)
+        if brief is None:
+            return response(start_response, "404 Not Found", "Không tìm thấy bài viết.")
+        return response(
+            start_response, "200 OK", json.dumps(brief, ensure_ascii=False, indent=2) + "\n",
+            [("Content-Disposition", f'attachment; filename="reel-brief-{brief["post_id"]}.json"'),
+             ("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff")],
+            content_type="application/json; charset=utf-8",
+        )
 
     if method == "POST" and path in ACTIONS:
         try:
