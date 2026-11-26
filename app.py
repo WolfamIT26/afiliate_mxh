@@ -9,6 +9,7 @@ import activity
 import catalog
 import profiles
 import reels
+import tasks
 import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
@@ -41,6 +42,7 @@ def initialize():
         workflow.initialize(db)
         reels.initialize(db)
         activity.initialize(db)
+        tasks.initialize(db)
 
 
 def page_section(db):
@@ -62,10 +64,15 @@ def add_page(db, fields):
 
 
 def render(db, filters=None):
-    return activity.section(db) + page_section(db) + catalog.section(db) + workflow.section(db, filters)
+    return (
+        tasks.section(db) + activity.section(db) + page_section(db)
+        + catalog.section(db) + workflow.section(db, filters)
+    )
 
 
 ACTIONS = {
+    "/tasks": tasks.create,
+    "/tasks/advance": tasks.advance,
     "/pages": add_page,
     "/pages/profile": profiles.save,
     "/products": catalog.add_product,
