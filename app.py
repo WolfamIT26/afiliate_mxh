@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 import catalog
+import profiles
 import reels
 import workflow
 
@@ -34,14 +35,14 @@ def initialize():
         """)
         db.executemany("INSERT OR IGNORE INTO pages(name) VALUES (?)",
                        [(name,) for name in SEED_PAGES])
+        profiles.initialize(db)
         catalog.initialize(db)
         workflow.initialize(db)
         reels.initialize(db)
 
 
 def page_section(db):
-    items = "".join(f"<li>{escape(row['name'])}</li>"
-                    for row in db.execute("SELECT name FROM pages ORDER BY id"))
+    items = profiles.page_items(db)
     return f"""
         <section><h2>Fanpage</h2><ul>{items}</ul>
         <form method="post" action="/pages">
@@ -64,6 +65,7 @@ def render(db):
 
 ACTIONS = {
     "/pages": add_page,
+    "/pages/profile": profiles.save,
     "/products": catalog.add_product,
     "/posts": workflow.add_post,
     "/reels/scenes": reels.add_scene,
