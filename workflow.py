@@ -81,11 +81,15 @@ def post_card(db, row):
     else:
         scheduled = datetime.fromisoformat(row["scheduled_at"]).astimezone(VIETNAM_TIME)
         action = f'<p>{scheduled:%d/%m/%Y %H:%M} (giờ Việt Nam)</p>'
-    product = escape(row["product"] or "")
+    product = ""
+    if row["product_url"] is not None:
+        url = escape(row["product_url"])
+        name = escape(row["product"])
+        product = f'<p><a href="{url}" rel="noreferrer">{name}</a><br>{url}</p>'
     return f"""
         <article><strong>{escape(row["page"])} · {STATUS_LABELS[row["status"]]}</strong>
         <p style="white-space: pre-wrap">{escape(row["body"])}</p>
-        <p>{product}</p>{reels.render_plan(db, post_id, row["status"])}{action}</article>
+        {product}{reels.render_plan(db, post_id, row["status"])}{action}</article>
     """
 
 
@@ -103,9 +107,12 @@ def section(db, filters=None):
                            page_id if page_id is not None else "")
     filter_statuses = options([("", "Tất cả trạng thái"), *STATUS_LABELS.items()],
                               status or "")
-    products = options(db.execute("SELECT id, name FROM products ORDER BY name"))
+    products = options(
+        (product["id"], f'{product["name"]} · {product["url"]}')
+        for product in db.execute("SELECT id, name, url FROM products ORDER BY name, id")
+    )
     posts = "".join(post_card(db, row) for row in db.execute("""
-        SELECT posts.*, pages.name AS page, products.name AS product
+        SELECT posts.*, pages.name AS page, products.name AS product, products.url AS product_url
         FROM posts JOIN pages ON pages.id = posts.page_id
         LEFT JOIN products ON products.id = posts.product_id
         WHERE (? IS NULL OR posts.page_id = ?) AND (? IS NULL OR posts.status = ?)
