@@ -7,6 +7,7 @@ from wsgiref.simple_server import make_server
 
 import activity
 import catalog
+import office
 import profiles
 import reels
 import tasks
@@ -91,6 +92,9 @@ def response(start_response, status, content, headers=()):
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
+    if method == "GET" and path == "/office":
+        with database() as db:
+            return response(start_response, "200 OK", office.render(db))
     if method == "GET" and path == "/":
         filters = parse_qs(environ.get("QUERY_STRING", ""))
         with database() as db:
@@ -108,7 +112,7 @@ input, select, textarea, button {{ font: inherit; padding: .4rem; max-width: 100
 button {{ color: white; background: #18563f; border: 0; border-radius: .3rem; cursor: pointer; }}
 article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anywhere; }}
 </style>
-<main><h1>Affiliate MXH</h1>{content}</main></html>""")
+<main><h1>Affiliate MXH</h1><p><a href="/office">Mở văn phòng 3D</a></p>{content}</main></html>""")
 
     if method == "POST" and path in ACTIONS:
         try:

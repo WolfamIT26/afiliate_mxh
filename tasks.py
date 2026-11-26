@@ -1,5 +1,7 @@
 from html import escape
 
+from office import ROOMS
+
 STATUS_LABELS = {
     "pending": "Chờ nhận việc",
     "running": "Đang thực hiện",
@@ -90,6 +92,7 @@ def section(db):
         f'<option value="{row["id"]}">{escape(row["name"])}</option>'
         for row in db.execute("SELECT id, name FROM pages ORDER BY id")
     )
+    rooms = "".join(f'<option value="{name}">' for name in ROOMS)
     cards = "".join(task_card(row) for row in db.execute("""
         SELECT work_tasks.*, pages.name AS page
         FROM work_tasks LEFT JOIN pages ON pages.id = work_tasks.page_id
@@ -101,7 +104,8 @@ def section(db):
             <p>Trạng thái do người dùng cập nhật trên dashboard.</p>
             <form method="post" action="/tasks">
                 <label>Tên việc <input name="title" required maxlength="160"></label>
-                <label>Người hoặc nhóm phụ trách <input name="assignee" required maxlength="100"></label>
+                <label>Người hoặc nhóm phụ trách <input name="assignee" list="office-rooms" required maxlength="100"></label>
+                <datalist id="office-rooms">{rooms}</datalist>
                 <label>Fanpage <select name="page_id"><option value="">Toàn dự án</option>{pages}</select></label>
                 <button>Tạo phiếu</button>
             </form>
