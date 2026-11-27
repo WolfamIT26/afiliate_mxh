@@ -22,7 +22,10 @@ import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
 PLAYBOOK_PATH = Path(__file__).resolve().parent / "docs" / "agent-playbook.md"
-NAVIGATION = '<a href="/">Hôm nay</a><a href="/pages">Fanpage</a><a href="/calendar">Lịch đăng</a><a href="/knowledge">Sổ tay Agent</a>'
+NAVIGATION = (
+    '<a href="/">Hôm nay</a><a href="/pages">Fanpage</a><a href="/calendar">Lịch đăng</a>'
+    '<a href="/products">Sản phẩm</a><a href="/knowledge">Sổ tay Agent</a>'
+)
 
 
 @contextmanager
@@ -72,6 +75,8 @@ ACTIONS = {
     "/pages/apply-template": page_directory.apply_template,
     "/pages/facebook-check": facebook_connection.check,
     "/products": catalog.add_product,
+    "/products/import": catalog.import_products,
+    "/products/source": catalog.update_source,
     "/posts": workflow.add_post,
     "/reels/scenes": reels.add_scene,
     "/reels/scenes/edit": reels.edit_scene,
@@ -92,7 +97,9 @@ def response(start_response, status, content, headers=(), content_type="text/htm
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
-    if method == "GET" and path in ("/", "/knowledge", "/reels/review", "/pages", "/pages/settings", "/calendar"):
+    if method == "GET" and path in (
+        "/", "/knowledge", "/reels/review", "/pages", "/pages/settings", "/calendar", "/products",
+    ):
         filters = parse_qs(environ.get("QUERY_STRING", ""))
         if path == "/knowledge":
             page_title = "Sổ tay Agent"
@@ -123,6 +130,10 @@ def application(environ, start_response):
             page_title = "Lịch đăng"
             with database() as db:
                 content = calendar_view.calendar(db, filters)
+        elif path == "/products":
+            page_title = "Kho sản phẩm affiliate"
+            with database() as db:
+                content = catalog.directory(db, filters)
         else:
             page_title = "Affiliate MXH"
             with database() as db:
@@ -179,7 +190,8 @@ th, td {{ border-bottom: 1px solid #d5ddd8; padding: .55rem; }}
     if method == "POST" and path in ACTIONS:
         try:
             length = int(environ.get("CONTENT_LENGTH") or 0)
-            if not 0 <= length <= 65536:
+            limit = catalog.MAX_IMPORT_FORM_BYTES if path == "/products/import" else 65536
+            if not 0 <= length <= limit:
                 return response(start_response, "413 Content Too Large", "Dữ liệu quá lớn.")
             form = environ["wsgi.input"].read(length).decode("utf-8")
             parsed = parse_qs(form, keep_blank_values=True)
@@ -190,8 +202,10 @@ th, td {{ border-bottom: 1px solid #d5ddd8; padding: .55rem; }}
                 location = ACTIONS[path](db, fields) or "/"
         except (ValueError, sqlite3.IntegrityError) as error:
             message = str(error) if isinstance(error, ValueError) else "Dữ liệu bị trùng hoặc không hợp lệ."
-            return response(start_response, "400 Bad Request",
-                            f'<p>{escape(message)}</p><a href="/">Về trang chính</a>')
+            back = '<a href="/">Về trang chính</a>'
+            if path.startswith("/products"):
+                back = '<a href="/products">Về kho sản phẩm</a>'
+            return response(start_response, "400 Bad Request", f'<p>{escape(message)}</p>{back}')
         return response(start_response, "303 See Other", "", [("Location", location)])
     return response(start_response, "404 Not Found", "Không tìm thấy trang.")
 

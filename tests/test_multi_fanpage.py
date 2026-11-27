@@ -130,6 +130,59 @@ class MultiFanpageTest(unittest.TestCase):
         self.submit("/tasks", {"page_id": 2, "title": "Không tạo", "assignee": "QA"}, status=400)
         self.assertIn("Bài B", self.request("/?page_id=2")["body"])
 
+    def test_affiliate_catalog_migrates_and_preserves_links_in_drafts(self):
+        with sqlite3.connect(self.database) as legacy:
+            legacy.executescript("""
+                CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE);
+                INSERT INTO products VALUES (31, 'Đèn bàn cũ', 'https://example.test/old?ref=17');
+            """)
+        app.initialize()
+        draft = self.submit("/posts", {"page_id": 1, "product_id": 31, "body": "Bài dùng link cũ"})
+        self.assertIn("Đèn bàn cũ", self.request("/products?platform=")["body"])
+        self.submit("/products/source", {"id": 31, "platform": "shopee",
+                                         "source_url": "https://example.test/den-ban"})
+        for index in range(25):
+            self.submit("/products", {"name": f"Sản phẩm {index}", "platform": "lazada",
+                                      "url": f"https://example.test/link-{index}"})
+        listing = self.request("/products?platform=shopee&" + urlencode({"q": "ĐÈN BÀN"}))["body"]
+        self.assertIn("Đèn bàn cũ", listing)
+        self.assertIn("https://example.test/den-ban", listing)
+        self.assertNotIn("Sản phẩm 0", listing)
+        self.assertIn("Trang 1/2", self.request("/products")["body"])
+        self.assertIn('id="product-31"', self.request("/products?p=2")["body"])
+        changed = self.submit("/products/source", {"id": 31, "platform": "shopee"})
+        self.assertEqual(changed["headers"]["Location"], "/products?p=2#product-31")
+        self.submit("/products/source", {"id": 31, "platform": "shopee",
+                                         "source_url": "javascript:alert(1)"}, status=400)
+        self.submit("/products", {"name": "Link trùng", "url": "https://example.test/old?ref=17"}, status=400)
+        app.initialize()
+        self.assertIn("https://example.test/old?ref=17", self.request(draft["headers"]["Location"].split("#")[0])["body"])
+        saved = self.submit("/products", {"name": "Đèn mới", "url": "https://example.test/new",
+                                          "platform": "shopee", "return_to": "catalog"})
+        self.assertEqual(saved["headers"]["Location"], "/products#product-57")
+
+    def test_catalog_import_accepts_csv_and_spreadsheet_rows_atomically(self):
+        app.initialize()
+        imported = self.submit("/products/import", {"rows": (
+            "\ufefften_san_pham,link_affiliate,san,link_goc\r\n"
+            '"Đèn bàn, cỡ nhỏ",https://example.test/affiliate-a,Shopee,https://example.test/den\r\n'
+            "Hộp đồ,https://example.test/affiliate-b,Lazada,\r\n"
+        )})
+        self.assertEqual(imported["headers"]["Location"], "/products?imported=2#catalog-import")
+        self.assertIn("Đã nhập 2 sản phẩm", self.request("/products?imported=2")["body"])
+        self.submit("/products/import", {"rows": (
+            "Quạt\thttps://example.test/affiliate-c\tTikTok Shop\r\n"
+            "Áo\thttps://example.test/affiliate-d"
+        )})
+        self.assertIn("Quạt", self.request("/products?platform=tiktok_shop")["body"])
+        failure = self.submit("/products/import", {"rows": (
+            "Bản ghi mới,https://example.test/affiliate-e\n"
+            "Trùng link,https://example.test/affiliate-a"
+        )}, status=400)
+        self.assertIn("Dòng 2. Link affiliate này đã có trong kho.", failure["body"])
+        self.assertNotIn("Bản ghi mới", self.request("/products")["body"])
+        self.assertIn("4 sản phẩm", self.request("/products")["body"])
+
     def test_facebook_check_matches_page_and_limits_granular_scopes(self):
         app.initialize()
         one = self.add_page("Kênh một", facebook_id="301")
