@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#123b35">
+<meta name="description" content="Khám phá văn phòng 3D của Affiliate MXH và xem kết quả công việc theo từng phòng ban.">
+<title>Văn phòng 3D · Affiliate MXH</title>
+<link rel="stylesheet" href="/office.css">
+<script src="/office-scene.js" defer></script>
+<script src="/office-ui.js" defer></script>
+</head>
+<body>
+<header class="masthead">
+  <div class="identity">
+    <span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <div><strong>Affiliate MXH</strong><span>Văn phòng 3D</span></div>
+  </div>
+  <div class="header-actions">
+    <span class="view-mode" id="view-mode"></span>
+    <a class="return-link" href="/" id="dashboard-link" hidden>Về tổng quan</a>
+  </div>
+</header>
+<main class="workspace">
+  <section class="scene-area" aria-label="Tòa nhà Affiliate MXH">
+    <div class="scene-toolbar">
+      <div class="scene-instructions"><strong>Tòa nhà Affiliate MXH</strong><span>Kéo để xoay, bấm phòng để xem phiếu.</span></div>
+      <div class="controls" aria-label="Điều khiển góc nhìn">
+        <button type="button" id="front">Chính diện</button>
+        <button type="button" id="zoom-out" aria-label="Thu nhỏ">−</button>
+        <button type="button" id="zoom-in" aria-label="Phóng to">+</button>
+        <button type="button" id="motion" aria-pressed="true">Tạm dừng</button>
+      </div>
+    </div>
+    <div class="scene-scroll">
+      <div class="stage" id="stage">
+        <canvas id="building" aria-label="Mô hình tòa nhà với các phòng và robot chuyển động">Sơ đồ 3D cần trình duyệt hỗ trợ Canvas.</canvas>
+        <div class="roof-title" aria-hidden="true" id="roof-title">AFFILIATE MXH</div>
+        <div id="room-labels"></div>
+      </div>
+    </div>
+    <div class="scene-key">
+      <span><i class="key-floor"></i>Phòng ban</span>
+      <span><i class="key-active"></i>Có phiếu đang thực hiện</span>
+      <span><i class="key-picked"></i>Phòng đang xem</span>
+    </div>
+  </section>
+  <aside class="detail" id="department-detail" aria-labelledby="detail-title">
+    <label class="room-field" for="room-picker">Chọn phòng ban</label>
+    <select id="room-picker"></select>
+    <div class="detail-header">
+      <span class="detail-label" id="detail-label">Phòng ban</span>
+      <h1 id="detail-title">Văn phòng 3D</h1>
+      <p id="detail-note"></p>
+    </div>
+    <div class="counts" id="counts" aria-label="Tình trạng phiếu">
+      <div><strong id="count-pending">0</strong><span>Chờ nhận</span></div>
+      <div><strong id="count-running">0</strong><span>Đang làm</span></div>
+      <div><strong id="count-done">0</strong><span>Đã bàn giao</span></div>
+    </div>
+    <div class="task-list" id="task-list" aria-live="polite"></div>
+    <div class="detail-footer">
+      <span id="refresh-status" role="status"></span>
+      <button type="button" id="refresh" hidden>Cập nhật phiếu</button>
+    </div>
+  </aside>
+</main>
+<script type="application/json" id="office-data"><!--OFFICE_DATA--></script>
+</body>
+</html>
