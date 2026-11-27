@@ -8,7 +8,10 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 import activity
+import calendar_view
 import catalog
+import facebook_connection
+import page_directory
 import profiles
 import reels
 import reel_media
@@ -18,8 +21,8 @@ import tasks
 import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
-SEED_PAGES = ("Trạm AI", "Tủ Đồ Hay", "Có Gì Hay")
 PLAYBOOK_PATH = Path(__file__).resolve().parent / "docs" / "agent-playbook.md"
+NAVIGATION = '<a href="/">Hôm nay</a><a href="/pages">Fanpage</a><a href="/calendar">Lịch đăng</a><a href="/knowledge">Sổ tay Agent</a>'
 
 
 @contextmanager
@@ -36,53 +39,38 @@ def database():
 
 def initialize():
     with database() as db:
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS pages (
-                id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE
-            )
-        """)
-        db.executemany("INSERT OR IGNORE INTO pages(name) VALUES (?)",
-                       [(name,) for name in SEED_PAGES])
+        db.execute("BEGIN IMMEDIATE")
         profiles.initialize(db)
+        facebook_connection.initialize(db)
         catalog.initialize(db)
         workflow.initialize(db)
         reels.initialize(db)
         reel_media.initialize(db)
         reel_review.initialize(db)
+        if db.execute("PRAGMA user_version").fetchone()[0] == 0:
+            reel_review.migrate_page_identity(db)
+            db.execute("PRAGMA user_version = 1")
         activity.initialize(db)
         tasks.initialize(db)
 
 
-def page_section(db):
-    items = profiles.page_items(db)
-    return f"""
-        <section><h2>Fanpage</h2><ul>{items}</ul>
-        <form method="post" action="/pages">
-            <label>Tên Fanpage <input name="name" required maxlength="120"></label>
-            <button>Thêm Fanpage</button>
-        </form></section>
-    """
-
-
-def add_page(db, fields):
-    name = fields.get("name", "").strip()
-    if not 1 <= len(name) <= 120:
-        raise ValueError("Tên Fanpage cần từ 1 đến 120 ký tự.")
-    db.execute("INSERT INTO pages(name) VALUES (?)", (name,))
-
-
 def render(db, filters=None):
     return (
-        tasks.section(db, filters) + activity.section(db) + page_section(db)
-        + catalog.section(db) + workflow.section(db, filters)
+        calendar_view.today(db) + workflow.section(db, filters) + tasks.section(db, filters)
+        + catalog.section(db) + activity.section(db)
     )
 
 
 ACTIONS = {
     "/tasks": tasks.create,
     "/tasks/advance": tasks.advance,
-    "/pages": add_page,
+    "/pages": page_directory.create,
+    "/pages/settings": page_directory.save,
+    "/pages/bulk": page_directory.bulk_update,
     "/pages/profile": profiles.save,
+    "/pages/templates": page_directory.save_template,
+    "/pages/apply-template": page_directory.apply_template,
+    "/pages/facebook-check": facebook_connection.check,
     "/products": catalog.add_product,
     "/posts": workflow.add_post,
     "/reels/scenes": reels.add_scene,
@@ -92,6 +80,7 @@ ACTIONS = {
     "/reels/review/confirm": reel_review.confirm,
     "/posts/approve": workflow.approve,
     "/posts/schedule": workflow.schedule,
+    "/posts/unschedule": workflow.cancel_schedule,
 }
 
 
@@ -103,15 +92,14 @@ def response(start_response, status, content, headers=(), content_type="text/htm
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
-    if method == "GET" and path in ("/", "/knowledge", "/reels/review"):
+    if method == "GET" and path in ("/", "/knowledge", "/reels/review", "/pages", "/pages/settings", "/calendar"):
+        filters = parse_qs(environ.get("QUERY_STRING", ""))
         if path == "/knowledge":
             page_title = "Sổ tay Agent"
-            navigation = '<a href="/">Về dashboard</a>'
             playbook = escape(PLAYBOOK_PATH.read_text(encoding="utf-8"))
             content = f'<section><pre class="playbook">{playbook}</pre></section>'
         elif path == "/reels/review":
             page_title = "Kiểm tra Reel"
-            navigation = '<a href="/">Về dashboard</a>'
             with database() as db:
                 post, scenes, revision = reel_review.snapshot(
                     db, media_routes.query_value(environ, "post_id")
@@ -120,28 +108,50 @@ def application(environ, start_response):
                     return response(start_response, "404 Not Found", "Không tìm thấy kế hoạch Reel.")
                 review = reel_review.current(db, post["id"], revision)
             content = reel_review.section(post, scenes, revision, review)
+        elif path == "/pages":
+            page_title = "Quản lý Fanpage"
+            with database() as db:
+                content = page_directory.directory(db, filters)
+        elif path == "/pages/settings":
+            with database() as db:
+                page = profiles.get(db, filters.get("page_id", [""])[-1])
+                if page is None:
+                    return response(start_response, "404 Not Found", "Không tìm thấy Fanpage.")
+                page_title = page["name"]
+                content = page_directory.settings(db, page) + facebook_connection.section(db, page)
+        elif path == "/calendar":
+            page_title = "Lịch đăng"
+            with database() as db:
+                content = calendar_view.calendar(db, filters)
         else:
             page_title = "Affiliate MXH"
-            navigation = '<a href="/knowledge">Sổ tay Agent</a>'
-            filters = parse_qs(environ.get("QUERY_STRING", ""))
             with database() as db:
                 content = render(db, filters)
         return response(start_response, "200 OK", f"""<!doctype html>
 <html lang="vi"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{page_title}</title>
+<title>{escape(page_title)}</title>
 <style>
 body {{ margin: 2rem auto; padding: 0 1rem; max-width: 64rem; background: #f2f5f2;
         color: #142b22; font: 1rem/1.5 system-ui, sans-serif; }}
 section {{ background: white; padding: 1.25rem; border-radius: .75rem; margin-bottom: 1rem; }}
-nav {{ margin-bottom: 1rem; }}
+nav {{ margin-bottom: 1rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }}
 .playbook {{ font: inherit; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }}
 h2 {{ margin-top: 0; }} label {{ display: block; margin-bottom: .75rem; }}
 input, select, textarea, button {{ font: inherit; padding: .4rem; max-width: 100%; }}
 button {{ color: white; background: #18563f; border: 0; border-radius: .3rem; cursor: pointer; }}
 article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anywhere; }}
+article:target {{ outline: 2px solid #18563f; padding-inline: .5rem; }}
+.form-row {{ display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; margin-block: .75rem; }}
+.form-row label {{ margin: 0; }}
+.form-row label :is(input, select) {{ display: block; max-width: 100%; }}
+.profile-fields {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .75rem; }}
+.profile-fields textarea {{ box-sizing: border-box; width: 100%; display: block; }}
+.table-wrap {{ overflow-x: auto; }}
+table {{ width: 100%; border-collapse: collapse; text-align: left; }}
+th, td {{ border-bottom: 1px solid #d5ddd8; padding: .55rem; }}
 </style>
-<main><h1>{page_title}</h1><nav>{navigation}</nav>{content}</main></html>""")
+<main><h1>{escape(page_title)}</h1><nav aria-label="Điều hướng chính">{NAVIGATION}</nav>{content}</main></html>""")
 
     if method == "GET" and path == "/reels/brief":
         post_id = parse_qs(environ.get("QUERY_STRING", "")).get("post_id", [""])[-1]
@@ -172,14 +182,17 @@ article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anyw
             if not 0 <= length <= 65536:
                 return response(start_response, "413 Content Too Large", "Dữ liệu quá lớn.")
             form = environ["wsgi.input"].read(length).decode("utf-8")
-            fields = {key: values[-1] for key, values in parse_qs(form).items()}
+            parsed = parse_qs(form, keep_blank_values=True)
+            fields = {key: values[-1] for key, values in parsed.items()}
+            if path == "/pages/bulk":
+                fields["page_ids"] = parsed.get("page_ids", [])
             with database() as db:
-                ACTIONS[path](db, fields)
+                location = ACTIONS[path](db, fields) or "/"
         except (ValueError, sqlite3.IntegrityError) as error:
             message = str(error) if isinstance(error, ValueError) else "Dữ liệu bị trùng hoặc không hợp lệ."
             return response(start_response, "400 Bad Request",
                             f'<p>{escape(message)}</p><a href="/">Về trang chính</a>')
-        return response(start_response, "303 See Other", "", [("Location", "/")])
+        return response(start_response, "303 See Other", "", [("Location", location)])
     return response(start_response, "404 Not Found", "Không tìm thấy trang.")
 
 

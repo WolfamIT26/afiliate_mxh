@@ -28,10 +28,14 @@ def create(db, fields):
     page_id = fields.get("page_id") or None
     if not 1 <= len(title) <= 160 or not 1 <= len(assignee) <= 100:
         raise ValueError("Nhập tên việc từ 1–160 ký tự và người hoặc nhóm phụ trách từ 1–100 ký tự.")
-    if page_id is not None and db.execute("SELECT id FROM pages WHERE id = ?", (page_id,)).fetchone() is None:
-        raise ValueError("Fanpage không tồn tại.")
-    db.execute("INSERT INTO work_tasks (page_id, title, assignee) VALUES (?, ?, ?)",
-               (page_id, title, assignee))
+    result = db.execute("""
+        INSERT INTO work_tasks(page_id, title, assignee)
+        SELECT ?, ?, ? WHERE ? IS NULL OR EXISTS (
+            SELECT 1 FROM pages WHERE id = ? AND state <> 'archived'
+        )
+    """, (page_id, title, assignee, page_id, page_id))
+    if result.rowcount != 1:
+        raise ValueError("Chọn Fanpage tồn tại và chưa lưu trữ để tạo phiếu.")
 
 
 def advance(db, fields):
@@ -95,8 +99,9 @@ def options(choices, selected=""):
 
 def section(db, filters=None):
     filters = filters or {}
-    page_choices = [(str(row["id"]), row["name"])
-                    for row in db.execute("SELECT id, name FROM pages ORDER BY id")]
+    all_pages = db.execute("SELECT id, name, state FROM pages ORDER BY id").fetchall()
+    page_choices = [(str(row["id"]), row["name"]) for row in all_pages]
+    available_pages = [(str(row["id"]), row["name"]) for row in all_pages if row["state"] != "archived"]
     page = filters.get("task_page", [""])[-1]
     if page != "project" and page not in dict(page_choices):
         page = ""
@@ -104,7 +109,7 @@ def section(db, filters=None):
     if status not in STATUS_LABELS:
         status = ""
 
-    pages = options([("", "Toàn dự án"), *page_choices])
+    pages = options([("", "Toàn dự án"), *available_pages])
     filter_pages = options([("", "Tất cả Fanpage"), ("project", "Toàn dự án"), *page_choices], page)
     filter_statuses = options([("", "Tất cả trạng thái"), *STATUS_LABELS.items()], status)
     cards = "".join(task_card(row) for row in db.execute("""

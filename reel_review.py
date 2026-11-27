@@ -22,7 +22,7 @@ def initialize(db):
 
 def snapshot(db, post_id):
     post = db.execute("""
-        SELECT posts.id, posts.status, posts.body, pages.name AS fanpage,
+        SELECT posts.id, posts.page_id, posts.status, posts.body, pages.name AS fanpage,
                products.name AS product, products.url AS affiliate_url
         FROM posts JOIN pages ON pages.id = posts.page_id
         LEFT JOIN products ON products.id = posts.product_id
@@ -31,11 +31,21 @@ def snapshot(db, post_id):
     if post is None:
         return None, [], None
     scenes = reels.scene_rows(db, post_id)
-    # Status changes at approval and scheduling. The reviewed content stays the same.
-    content = [post["fanpage"], post["body"], post["product"], post["affiliate_url"],
+    return post, scenes, content_revision(post, scenes, post["page_id"])
+
+
+def content_revision(post, scenes, page_identity):
+    content = [page_identity, post["body"], post["product"], post["affiliate_url"],
                [tuple(scene) for scene in scenes]]
-    revision = hashlib.sha256(json.dumps(content, ensure_ascii=False).encode("utf-8")).hexdigest()
-    return post, scenes, revision
+    return hashlib.sha256(json.dumps(content, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def migrate_page_identity(db):
+    rows = db.execute("SELECT post_id, revision FROM reel_reviews").fetchall()
+    for row in rows:
+        post, scenes, revision = snapshot(db, row["post_id"])
+        if post and row["revision"] == content_revision(post, scenes, post["fanpage"]):
+            db.execute("UPDATE reel_reviews SET revision = ? WHERE post_id = ?", (revision, post["id"]))
 
 
 def current(db, post_id, revision):

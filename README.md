@@ -12,7 +12,15 @@ Mở http://127.0.0.1:8080. Dữ liệu nằm trong SQLite. Có thể đặt đ�
 
 Máy chủ thử nghiệm chỉ lắng nghe trên localhost. Tài khoản và phân quyền cần có trước khi triển khai cho nhiều người dùng.
 
-Ở nhánh `feature/content-workflow`, bạn có thể lưu sản phẩm kèm link affiliate, tạo bài nháp cho từng Fanpage, duyệt bài và lưu lịch theo giờ Việt Nam. Lịch hiện được lưu trong SQLite. Tích hợp đăng bài Facebook sẽ cần kết nối riêng.
+## Quản lý nhiều Fanpage
+
+Mở **Fanpage** để thêm trang, tìm theo tên hoặc Page ID, lọc theo nhóm và trạng thái, hoặc cập nhật các trang đã chọn. Trong cài đặt từng Fanpage, lưu hồ sơ thương hiệu, chủ đề, nguồn, CTA, quy tắc nội dung và CSKH. Dùng **Lưu cấu hình hiện tại làm mẫu** để dùng lại quy tắc nội dung khi thêm trang khác. Mẫu giữ nhóm và quy tắc, còn tên, Page ID và nhận diện được nhập riêng.
+
+**Hôm nay** tổng hợp bản nháp và lịch sắp tới. **Lịch đăng** hiển thị lịch 7 ngày theo từng Fanpage hoặc toàn hệ thống (giờ Việt Nam). Bấm vào lịch để mở bài và hủy lịch nếu cần. Khi tạm dừng hoặc lưu trữ một trang, lịch cũ được giữ và đánh dấu. Trang lưu trữ cũng không nhận bài nháp hoặc phiếu mới. Lịch được lưu cục bộ trong SQLite.
+
+### Kiểm tra kết nối Facebook
+
+Lưu Facebook Page ID trong cài đặt trang. Trên máy chạy app, đặt `AFFILIATE_FB_PAGE_TOKEN_<PAGE_ID>` cho từng trang và `AFFILIATE_FB_APP_TOKEN` cho ứng dụng Meta. Nếu một trang thuộc ứng dụng Meta khác, đặt riêng `AFFILIATE_FB_APP_TOKEN_<PAGE_ID>`. Đặt `AFFILIATE_FB_GRAPH_VERSION` thành phiên bản Graph API ứng dụng đang dùng. Khởi động lại app rồi bấm **Kiểm tra kết nối** trong cài đặt Fanpage. Kết quả ghi nhận Page ID và quyền khai báo trong token. Lập lịch cục bộ, phát hành thật, bình luận và đồng bộ số liệu là các luồng riêng.
 
 ## Lập kế hoạch cảnh Reel
 
