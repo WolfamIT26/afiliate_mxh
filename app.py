@@ -12,6 +12,7 @@ import catalog
 import profiles
 import reels
 import reel_media
+import reel_review
 import media_routes
 import tasks
 import workflow
@@ -47,6 +48,7 @@ def initialize():
         workflow.initialize(db)
         reels.initialize(db)
         reel_media.initialize(db)
+        reel_review.initialize(db)
         activity.initialize(db)
         tasks.initialize(db)
 
@@ -87,6 +89,7 @@ ACTIONS = {
     "/reels/scenes/edit": reels.edit_scene,
     "/reels/scenes/move": reels.move_scene,
     "/reels/scenes/delete": reels.delete_scene,
+    "/reels/review/confirm": reel_review.confirm,
     "/posts/approve": workflow.approve,
     "/posts/schedule": workflow.schedule,
 }
@@ -100,12 +103,23 @@ def response(start_response, status, content, headers=(), content_type="text/htm
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
-    if method == "GET" and path in ("/", "/knowledge"):
+    if method == "GET" and path in ("/", "/knowledge", "/reels/review"):
         if path == "/knowledge":
             page_title = "Sổ tay Agent"
             navigation = '<a href="/">Về dashboard</a>'
             playbook = escape(PLAYBOOK_PATH.read_text(encoding="utf-8"))
             content = f'<section><pre class="playbook">{playbook}</pre></section>'
+        elif path == "/reels/review":
+            page_title = "Kiểm tra Reel"
+            navigation = '<a href="/">Về dashboard</a>'
+            with database() as db:
+                post, scenes, revision = reel_review.snapshot(
+                    db, media_routes.query_value(environ, "post_id")
+                )
+                if not scenes:
+                    return response(start_response, "404 Not Found", "Không tìm thấy kế hoạch Reel.")
+                review = reel_review.current(db, post["id"], revision)
+            content = reel_review.section(post, scenes, revision, review)
         else:
             page_title = "Affiliate MXH"
             navigation = '<a href="/knowledge">Sổ tay Agent</a>'
@@ -148,6 +162,10 @@ article {{ border-top: 1px solid #d5ddd8; padding: .75rem 0; overflow-wrap: anyw
         return media_routes.remove(environ, start_response, database, response)
     if method == "POST" and path == "/reels/render":
         return media_routes.export(environ, start_response, database, response)
+    if method == "POST" and path == "/reels/review/generate":
+        return media_routes.generate_preview(environ, start_response, database, response)
+    if method == "GET" and path == "/reels/review/video":
+        return media_routes.preview_video(environ, start_response, database, response)
     if method == "POST" and path in ACTIONS:
         try:
             length = int(environ.get("CONTENT_LENGTH") or 0)

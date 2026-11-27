@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import monotonic
 
+from reel_media import check_container
+
 MAX_CLIPS = 12
 RENDER_TIMEOUT_SECONDS = 180
 PORTRAIT_FILTER = (
@@ -56,9 +58,11 @@ def render_reel(clips: Sequence[Path], output: Path) -> None:
             workdir = Path(temporary)
             clip_names = []
             for index, source in enumerate(sources):
+                check_container(source)
                 name = f"clip-{index:02d}.mp4"
                 run_ffmpeg(executable, [
-                    "-protocol_whitelist", "file", "-f", "mov", "-threads", "2", "-i", str(source),
+                    "-xerror", "-protocol_whitelist", "file", "-f", "mov", "-enable_drefs", "0",
+                    "-threads", "2", "-i", str(source),
                     "-map", "0:V:0", "-map_metadata", "-1", "-map_chapters", "-1",
                     "-an", "-abort_on", "empty_output_stream", "-filter_threads", "2", "-vf", PORTRAIT_FILTER,
                     "-c:v", "libx264", "-threads", "2", "-preset", "veryfast",
@@ -76,5 +80,5 @@ def render_reel(clips: Sequence[Path], output: Path) -> None:
             rendered.replace(destination)
     except ReelRenderError:
         raise
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, ValueError) as error:
         raise ReelRenderError("Không thể đọc clip nguồn hoặc lưu Reel vào vị trí đã chọn.") from error

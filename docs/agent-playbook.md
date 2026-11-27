@@ -6,7 +6,7 @@ Dùng sổ tay này khi nhận việc cho Trạm AI, Tủ Đồ Hay hoặc Có G
 
 Bản chạy cục bộ hỗ trợ thêm Fanpage, lưu sản phẩm và link affiliate, tạo nháp, lưu danh sách cảnh Reel 9:16 theo thứ tự, duyệt và lưu lịch theo giờ Việt Nam. Thời lượng hiển thị là tổng thời lượng **dự kiến** của các cảnh.
 
-Trong bản này, phiếu bàn giao và checklist dưới đây là mẫu thao tác thủ công. Tạo ảnh/video qua API, nhập MP4, ghép Reel, đăng lên Facebook và đồng bộ số liệu là các bước dự kiến. Trạng thái «Đã lên lịch» nghĩa là app đã lưu lịch cục bộ.
+App nhận clip MP4 dọc theo cảnh, ghép bản Reel có thể xem trước và lưu xác nhận kiểm tra trước khi duyệt. Phiếu bàn giao và checklist dưới đây dành cho người kiểm tra. Tạo ảnh/video qua API, đăng lên Facebook và đồng bộ số liệu là các bước dự kiến. Trạng thái «Đã lên lịch» nghĩa là app đã lưu lịch cục bộ.
 
 ## Bàn giao giữa các vai trò
 

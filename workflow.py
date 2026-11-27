@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 
 import activity
+import reel_review
 import reels
 
 VIETNAM_TIME = timezone(timedelta(hours=7))
@@ -34,6 +35,7 @@ def add_post(db, fields):
 
 
 def approve(db, fields):
+    reel_review.require_for_approval(db, fields.get("id"))
     result = db.execute("UPDATE posts SET status = 'approved' WHERE id = ? AND status = 'draft'",
                         (fields.get("id"),))
     if result.rowcount != 1:

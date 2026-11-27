@@ -24,6 +24,8 @@ Với Tủ Đồ Hay, xác nhận sản phẩm, ảnh gốc và link affiliate t
 
 ## Nhập và ghép clip Reel
 
-Cài FFmpeg và FFprobe rồi chạy app như bình thường. Trong bản nháp, nhập một MP4 dọc 9:16 cho mỗi cảnh. Khi đã đủ clip, chọn **Tải Reel MP4 không âm thanh**. Bản tải ghép theo thứ tự cảnh hiện tại. Soát lại thời lượng và ghép âm thanh bên ngoài trước khi đăng.
+Cài FFmpeg và FFprobe rồi chạy app như bình thường. Trong bản nháp, nhập một MP4 dọc 9:16 cho mỗi cảnh. Dùng **Thay clip** để cập nhật clip của cảnh đó. Khi đủ clip, mở **Kiểm tra Reel**, chọn **Dựng bản xem trước** và phát video trên trang kiểm tra. Soát thứ tự, thời lượng, nội dung, sản phẩm và link affiliate rồi xác nhận kiểm tra trước khi duyệt bài. Khi sửa cảnh, đổi thứ tự hoặc thay clip, hãy dựng và kiểm tra lại.
+
+Nút **Tải Reel MP4 không âm thanh** tải chính bản dựng đã xem khi có bản xem trước cho phiên bản hiện tại. Ghép âm thanh bên ngoài trước khi đăng nếu cần.
 
 App lưu clip trong thư mục `media/` hoặc đường dẫn `AFFILIATE_MEDIA_DIR`. Chế độ này dùng tệp bạn cung cấp. Kết nối API tạo clip và đăng Facebook cần thực hiện riêng.

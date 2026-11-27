@@ -3,12 +3,14 @@ import os
 import re
 import sqlite3
 import subprocess
+from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 FFPROBE_TIMEOUT = 10
+DECODE_TIMEOUT = 30
 
 
 def initialize(db):
@@ -23,16 +25,18 @@ def initialize(db):
     """)
 
 
-def get(db, scene_id):
-    return db.execute("""
-        SELECT filename, width, height, duration_ms FROM scene_assets WHERE scene_id = ?
-    """, (scene_id,)).fetchone()
-
-
 def media_path(filename):
     if not re.fullmatch(r"[a-f0-9]{32}\.mp4", filename):
         raise ValueError("Tên tệp video không hợp lệ.")
     return Path(os.environ.get("AFFILIATE_MEDIA_DIR") or "media") / filename
+
+
+def discard(filename):
+    if filename:
+        try:
+            media_path(filename).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def probe(path):
@@ -84,7 +88,51 @@ def probe(path):
     return width, height, duration_ms
 
 
-def attach(db, scene_id, data):
+def check_container(path):
+    # FFmpeg can decode the first frames of a cut MP4 without reporting an error.
+    size = path.stat().st_size
+    offset = 0
+    with path.open("rb") as source:
+        while offset < size:
+            header = source.read(8)
+            if len(header) != 8:
+                break
+            box_size = int.from_bytes(header[:4], "big")
+            if box_size == 0:
+                return  # The final box extends to EOF.
+            header_size = 8
+            if box_size == 1:
+                extended_size = source.read(8)
+                if len(extended_size) != 8:
+                    break
+                box_size = int.from_bytes(extended_size, "big")
+                header_size = 16
+            if not header_size <= box_size <= size - offset:
+                break
+            offset += box_size
+            source.seek(offset)
+    if offset != size:
+        raise ValueError("Clip có dữ liệu video bị lỗi hoặc bị cắt.")
+
+
+def check_playback(path):
+    try:
+        subprocess.run([
+            "ffmpeg", "-nostdin", "-v", "error", "-xerror",
+            "-protocol_whitelist", "file",
+            "-f", "mov", "-enable_drefs", "0", "-threads", "2", "-i", str(path.absolute()),
+            "-map", "0:V:0", "-an", "-abort_on", "empty_output_stream", "-f", "null", "-",
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=DECODE_TIMEOUT)
+    except FileNotFoundError:
+        raise ValueError("Máy chủ cần cài FFmpeg để kiểm tra video.") from None
+    except subprocess.TimeoutExpired:
+        raise ValueError("Kiểm tra phát video quá thời gian cho phép.") from None
+    except subprocess.CalledProcessError:
+        raise ValueError("Clip có dữ liệu video bị lỗi hoặc bị cắt.") from None
+
+
+@contextmanager
+def checked_upload(data):
     if not 1 <= len(data) <= MAX_UPLOAD_BYTES:
         raise ValueError("Tệp video phải có dung lượng từ 1 byte đến 25 MiB.")
     filename = uuid4().hex + ".mp4"
@@ -98,16 +146,31 @@ def attach(db, scene_id, data):
         width, height, duration_ms = probe(path)
         if duration_ms > 30000 or width > 2160 or height > 3840:
             raise ValueError("Clip tối đa 30 giây và 2160 × 3840 pixel.")
-        result = db.execute("""
-            INSERT INTO scene_assets(scene_id, filename, width, height, duration_ms)
-            SELECT reel_scenes.id, ?, ?, ?, ?
-            FROM reel_scenes JOIN posts ON posts.id = reel_scenes.post_id
-            WHERE reel_scenes.id = ? AND posts.status = 'draft'
-            ON CONFLICT(scene_id) DO NOTHING
-        """, (filename, width, height, duration_ms, scene_id))
-        if result.rowcount != 1:
-            raise ValueError("Chỉ đính kèm một MP4 vào cảnh thuộc bản nháp.")
+        check_container(path)
+        check_playback(path)
+        yield filename, width, height, duration_ms
     except (ValueError, OSError, sqlite3.Error):
         if created:
-            path.unlink(missing_ok=True)
+            discard(filename)
         raise
+
+
+def attach(db, scene_id, asset):
+    if not db.in_transaction:
+        db.execute("BEGIN IMMEDIATE")
+    scene = db.execute("""
+        SELECT scene_assets.filename
+        FROM reel_scenes JOIN posts ON posts.id = reel_scenes.post_id
+        LEFT JOIN scene_assets ON scene_assets.scene_id = reel_scenes.id
+        WHERE reel_scenes.id = ? AND posts.status = 'draft'
+    """, (scene_id,)).fetchone()
+    if scene is None:
+        raise ValueError("Chỉ nhập clip vào cảnh thuộc bản nháp.")
+    db.execute("""
+        INSERT INTO scene_assets(scene_id, filename, width, height, duration_ms)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(scene_id) DO UPDATE SET
+            filename = excluded.filename, width = excluded.width,
+            height = excluded.height, duration_ms = excluded.duration_ms
+    """, (scene_id, *asset))
+    return scene["filename"]

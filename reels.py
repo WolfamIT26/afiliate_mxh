@@ -56,14 +56,13 @@ def edit_scene(db, fields):
 
 
 def delete_scene(db, fields):
-    if db.execute("SELECT scene_id FROM scene_assets WHERE scene_id = ?", (fields.get("id"),)).fetchone():
-        raise ValueError("Gỡ clip trước khi xóa cảnh.")
     result = db.execute("""
         DELETE FROM reel_scenes
         WHERE id = ? AND post_id IN (SELECT id FROM posts WHERE status = 'draft')
+            AND NOT EXISTS (SELECT 1 FROM scene_assets WHERE scene_id = reel_scenes.id)
     """, (fields.get("id"),))
     if result.rowcount != 1:
-        raise ValueError("Chỉ xóa được cảnh thuộc bản nháp.")
+        raise ValueError("Chỉ xóa được cảnh thuộc bản nháp sau khi gỡ clip.")
 
 
 def move_scene(db, fields):
@@ -159,22 +158,27 @@ def scene_item(row, editable, can_move_up, can_move_down):
                     <button>Gỡ clip</button>
                 </form>
             """
-    elif editable:
+    if editable:
+        upload_label = "Thay clip" if row["filename"] else "Nhập clip"
         controls += f"""
             <form method="post" enctype="multipart/form-data" action="/reels/clip?scene_id={scene_id}">
                 <label>Clip MP4 9:16 <input type="file" name="clip" accept=".mp4,video/mp4" required></label>
-                <button>Nhập clip</button>
+                <button>{upload_label}</button>
             </form>
         """
     return f"<li>{prompt} <small>({seconds} giây)</small>{controls}</li>"
 
 
-def render_plan(db, post_id, status):
-    rows = db.execute("""
-        SELECT reel_scenes.id, prompt, seconds, filename, width, height, duration_ms
+def scene_rows(db, post_id):
+    return db.execute("""
+        SELECT reel_scenes.id, post_id, position, prompt, seconds, filename, width, height, duration_ms
         FROM reel_scenes LEFT JOIN scene_assets ON scene_assets.scene_id = reel_scenes.id
         WHERE post_id = ? ORDER BY position
     """, (post_id,)).fetchall()
+
+
+def render_plan(db, post_id, status):
+    rows = scene_rows(db, post_id)
     content = ""
     if rows:
         total = sum(row["seconds"] for row in rows)
@@ -182,7 +186,10 @@ def render_plan(db, post_id, status):
             scene_item(row, status == "draft", index > 0, index < len(rows) - 1)
             for index, row in enumerate(rows)
         )
-        content = f"<h4>Kế hoạch Reel 9:16 · {total} giây</h4><ol>{scenes}</ol>"
+        content = (
+            f'<h4>Kế hoạch Reel 9:16 · {total} giây</h4><ol>{scenes}</ol>'
+            f'<p><a href="/reels/review?post_id={post_id}">Kiểm tra Reel</a></p>'
+        )
     if rows and all(row["filename"] for row in rows):
         content += f"""
             <form method="post" action="/reels/render?post_id={post_id}">
