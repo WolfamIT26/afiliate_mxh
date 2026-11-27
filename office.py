@@ -14,6 +14,12 @@ ROOMS = (
 ROOM_INDEX = {name.casefold(): index for index, name in enumerate(ROOMS)}
 UNASSIGNED = len(ROOMS) - 1
 ROOM_TASK_LIMIT = 12
+ASSET_DIR = Path(__file__).resolve().parent
+ASSETS = {
+    "/office.css": "text/css; charset=utf-8",
+    "/office-scene.js": "text/javascript; charset=utf-8",
+    "/office-ui.js": "text/javascript; charset=utf-8",
+}
 
 
 def department_index(assignee):
@@ -57,6 +63,10 @@ def task_snapshot(db):
 
 
 def render(db):
-    template = Path(__file__).with_name("office.html").read_text(encoding="utf-8")
-    data = json.dumps(task_snapshot(db), ensure_ascii=False).replace("<", "\\u003c")
+    return render_snapshot(task_snapshot(db), mode="live")
+
+
+def render_snapshot(snapshot, *, mode="preview"):
+    template = (ASSET_DIR / "office.html").read_text(encoding="utf-8")
+    data = json.dumps({**snapshot, "mode": mode}, ensure_ascii=False).replace("<", "\\u003c")
     return template.replace("<!--OFFICE_DATA-->", data)

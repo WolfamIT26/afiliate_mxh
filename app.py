@@ -104,6 +104,9 @@ def response(start_response, status, content, headers=(), content_type="text/htm
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
+    if method == "GET" and path in office.ASSETS:
+        content = (office.ASSET_DIR / path.lstrip("/")).read_text(encoding="utf-8")
+        return response(start_response, "200 OK", content, content_type=office.ASSETS[path])
     if method == "GET" and path in ("/office", "/office/tasks"):
         with database() as db:
             if path == "/office":

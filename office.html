@@ -3,250 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#123b35">
+<meta name="description" content="Khám phá văn phòng 3D của Affiliate MXH và xem kết quả công việc theo từng phòng ban.">
 <title>Văn phòng 3D · Affiliate MXH</title>
-<style>
-:root {
-  color-scheme: dark;
-  font: 16px/1.5 system-ui, sans-serif;
-  background: #0c171d;
-  color: #ecf4f4;
-}
-* { box-sizing: border-box; }
-body { margin: 0; }
-header {
-  padding: 1.5rem clamp(1rem, 4vw, 4rem);
-  border-bottom: 1px solid #29464b;
-}
-a { color: #8fe1cf; }
-h1 { margin: .4rem 0; font-size: clamp(1.7rem, 4vw, 3rem); }
-header p, .status { margin: .2rem 0; color: #bacfd0; }
-main {
-  padding: 1.25rem clamp(1rem, 4vw, 4rem);
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr);
-  gap: 1.25rem;
-  align-items: start;
-}
-.controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-button { font: inherit; color: inherit; cursor: pointer; }
-.controls button {
-  padding: .45rem .75rem;
-  border: 1px solid #547479;
-  border-radius: .5rem;
-  background: #193039;
-}
-.stage { perspective: 1400px; padding: 1.5rem .25rem 2.5rem; }
-.plan {
-  --tilt: 23deg;
-  --turn: 0deg;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: .65rem;
-  transform: rotateX(var(--tilt)) rotateZ(var(--turn));
-  transform-style: preserve-3d;
-  transition: transform .25s ease;
-}
-.room {
-  display: flex;
-  flex-direction: column;
-  justify-content: end;
-  align-items: start;
-  min-height: 6.3rem;
-  padding: .6rem;
-  border: 2px solid #4a8590;
-  border-radius: .45rem;
-  background: linear-gradient(138deg, #294c57, #173138);
-  box-shadow: 0 5px 0 #10232b, 2px 8px 14px #0007;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-small { color: #c4dedd; }
-.room.busy { border-color: #e3ad5d; background: linear-gradient(138deg, #59452e, #332c25); }
-.room[aria-pressed="true"], :focus-visible { outline: 3px solid #f4ebe0; outline-offset: 2px; }
-.desk {
-  width: 1.8rem;
-  height: .75rem;
-  margin: 0 0 .6rem .3rem;
-  border-radius: .15rem;
-  background: #79b9ad;
-  box-shadow: 0 .26rem #3a7574, .1rem .4rem .2rem #081a20;
-  transform: skewX(-15deg);
-}
-.busy .desk { background: #fac870; }
-aside {
-  min-width: 0;
-  padding: 1rem;
-  background: #13262d;
-  border: 1px solid #29464b;
-  border-radius: .75rem;
-  overflow-wrap: anywhere;
-}
-aside h2 { margin-top: 0; }
-.tasks { list-style: none; padding: 0; }
-.tasks li { padding: .75rem 0; border-top: 1px solid #29464b; }
-.tasks small { display: block; }
-.tasks p { margin: .4rem 0 0; white-space: pre-wrap; }
-@media (max-width: 55rem) {
-  main { grid-template-columns: 1fr; }
-}
-@media (max-width: 40rem) {
-  .plan { grid-template-columns: repeat(3, minmax(0, 1fr)); transform: none; }
-  .controls .view-control { display: none; }
-  .stage { padding: 1rem .25rem .5rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .plan { transition: none; }
-}
-</style>
+<link rel="stylesheet" href="/office.css">
+<script src="/office-scene.js" defer></script>
+<script src="/office-ui.js" defer></script>
 </head>
 <body>
-<header>
-  <a href="/">Về tổng quan</a>
-  <h1>Văn phòng 3D</h1>
-  <p>Chọn phòng để xem việc được giao, trạng thái và kết quả bàn giao.</p>
-</header>
-<noscript><p>Bật JavaScript để mở sơ đồ tương tác, hoặc <a href="/#work-tasks">mở phiếu công việc</a>.</p></noscript>
-<main>
-  <div>
-    <div class="controls" aria-label="Góc nhìn văn phòng">
-      <button type="button" class="view-control" id="left">Xoay trái</button>
-      <button type="button" class="view-control" id="right">Xoay phải</button>
-      <button type="button" class="view-control" id="flat" aria-pressed="false">Nhìn từ trên</button>
-      <button type="button" id="refresh">Cập nhật phiếu</button>
-      <span class="status" role="status" id="refresh-status"></span>
-    </div>
-    <div class="stage"><div class="plan" id="plan"></div></div>
+<header class="masthead">
+  <div class="identity">
+    <span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <div><strong>Affiliate MXH</strong><span>Văn phòng 3D</span></div>
   </div>
-  <aside id="department-detail" aria-labelledby="detail-title">
-    <h2 id="detail-title" tabindex="-1">Chi tiết phòng</h2>
-    <div id="detail-body" aria-live="polite"></div>
-    <a href="/#work-tasks">Mở tất cả phiếu công việc</a>
+  <div class="header-actions">
+    <span class="view-mode" id="view-mode"></span>
+    <a class="return-link" href="/" id="dashboard-link" hidden>Về tổng quan</a>
+  </div>
+</header>
+<main class="workspace">
+  <section class="scene-area" aria-label="Tòa nhà Affiliate MXH">
+    <div class="scene-toolbar">
+      <div class="scene-instructions"><strong>Tòa nhà Affiliate MXH</strong><span>Kéo để xoay, bấm phòng để xem phiếu.</span></div>
+      <div class="controls" aria-label="Điều khiển góc nhìn">
+        <button type="button" id="front">Chính diện</button>
+        <button type="button" id="zoom-out" aria-label="Thu nhỏ">−</button>
+        <button type="button" id="zoom-in" aria-label="Phóng to">+</button>
+        <button type="button" id="motion" aria-pressed="true">Tạm dừng</button>
+      </div>
+    </div>
+    <div class="scene-scroll">
+      <div class="stage" id="stage">
+        <canvas id="building" aria-label="Mô hình tòa nhà với các phòng và robot chuyển động">Sơ đồ 3D cần trình duyệt hỗ trợ Canvas.</canvas>
+        <div class="roof-title" aria-hidden="true" id="roof-title">AFFILIATE MXH</div>
+        <div id="room-labels"></div>
+      </div>
+    </div>
+    <div class="scene-key">
+      <span><i class="key-floor"></i>Phòng ban</span>
+      <span><i class="key-active"></i>Có phiếu đang thực hiện</span>
+      <span><i class="key-picked"></i>Phòng đang xem</span>
+    </div>
+  </section>
+  <aside class="detail" id="department-detail" aria-labelledby="detail-title">
+    <label class="room-field" for="room-picker">Chọn phòng ban</label>
+    <select id="room-picker"></select>
+    <div class="detail-header">
+      <span class="detail-label" id="detail-label">Phòng ban</span>
+      <h1 id="detail-title">Văn phòng 3D</h1>
+      <p id="detail-note"></p>
+    </div>
+    <div class="counts" id="counts" aria-label="Tình trạng phiếu">
+      <div><strong id="count-pending">0</strong><span>Chờ nhận</span></div>
+      <div><strong id="count-running">0</strong><span>Đang làm</span></div>
+      <div><strong id="count-done">0</strong><span>Đã bàn giao</span></div>
+    </div>
+    <div class="task-list" id="task-list" aria-live="polite"></div>
+    <div class="detail-footer">
+      <span id="refresh-status" role="status"></span>
+      <button type="button" id="refresh" hidden>Cập nhật phiếu</button>
+    </div>
   </aside>
 </main>
 <script type="application/json" id="office-data"><!--OFFICE_DATA--></script>
-<script>
-const plan = document.querySelector('#plan');
-const detail = document.querySelector('#department-detail');
-const detailTitle = document.querySelector('#detail-title');
-const detailBody = document.querySelector('#detail-body');
-const refreshButton = document.querySelector('#refresh');
-const refreshStatus = document.querySelector('#refresh-status');
-let rooms = JSON.parse(document.querySelector('#office-data').textContent).rooms;
-let selected = -1;
-let shownRoom = '';
-let angle = 0;
-let refreshing = false;
-
-function element(tag, value, className) {
-  const node = document.createElement(tag);
-  if (value !== undefined) node.textContent = value;
-  if (className) node.className = className;
-  return node;
-}
-
-const roomButtons = rooms.map((room, index) => {
-  const button = element('button', undefined, 'room');
-  button.type = 'button';
-  button.setAttribute('aria-controls', detail.id);
-  const desk = element('span', undefined, 'desk');
-  desk.setAttribute('aria-hidden', 'true');
-  button.append(desk, element('strong', room.name), element('small'));
-  button.addEventListener('click', () => selectRoom(index, true));
-  plan.append(button);
-  return button;
-});
-
-function updateRooms() {
-  rooms.forEach((room, index) => {
-    const button = roomButtons[index];
-    button.setAttribute('aria-pressed', String(index === selected));
-    button.classList.toggle('busy', room.running > 0);
-    const counts = [[room.running, 'đang làm'], [room.pending, 'chờ'], [room.done, 'đã bàn giao']];
-    const summary = counts.filter(([count]) => count).map(([count, label]) => count + ' ' + label).join(' · ');
-    button.lastElementChild.textContent = summary || 'Chưa có phiếu';
-  });
-}
-
-function showRoom() {
-  const room = rooms[selected];
-  const nextRoom = JSON.stringify(room);
-  if (nextRoom === shownRoom) return;
-  shownRoom = nextRoom;
-  const focusedTask = detailBody.contains(document.activeElement) ? document.activeElement.dataset.task : '';
-  detailTitle.textContent = room.name;
-  const summary = element('p', room.pending + ' chờ nhận · ' + room.running + ' đang làm · ' + room.done + ' đã bàn giao');
-  detailBody.replaceChildren(summary);
-  if (!room.tasks.length) {
-    detailBody.append(element('p', 'Phòng này chưa có phiếu công việc.'));
-    return;
-  }
-  const list = element('ul', undefined, 'tasks');
-  for (const task of room.tasks) {
-    const item = element('li');
-    const title = element('a', task.title);
-    title.href = '/#task-' + task.id;
-    title.dataset.task = task.id;
-    item.append(title, element('small', task.assignee + ' · ' + task.page + ' · ' + task.status));
-    if (task.output) item.append(element('p', task.output));
-    list.append(item);
-  }
-  detailBody.append(list);
-  if (room.tasks.length < room.pending + room.running + room.done) {
-    detailBody.append(element('p', 'Đang hiện các phiếu đang làm, đang chờ và mới bàn giao.'));
-  }
-  if (focusedTask) {
-    const matching = Array.from(list.querySelectorAll('a')).find(link => link.dataset.task === focusedTask);
-    (matching || detailTitle).focus({preventScroll: true});
-  }
-}
-
-function selectRoom(index, userAction = false) {
-  selected = index;
-  if (userAction) history.replaceState(null, '', '#department-' + index);
-  updateRooms();
-  showRoom();
-  if (userAction && window.matchMedia('(max-width: 55rem)').matches) detailTitle.focus();
-}
-
-const hashRoom = location.hash.match(/^#department-(\d+)$/);
-const initialRoom = hashRoom && Number(hashRoom[1]) < rooms.length ? Number(hashRoom[1]) : rooms.findIndex(room => room.running);
-selectRoom(Math.max(initialRoom, 0));
-
-function rotate(delta) {
-  angle = Math.max(-10, Math.min(10, angle + delta));
-  plan.style.setProperty('--turn', angle + 'deg');
-}
-document.querySelector('#left').addEventListener('click', () => rotate(-5));
-document.querySelector('#right').addEventListener('click', () => rotate(5));
-document.querySelector('#flat').addEventListener('click', event => {
-  const button = event.currentTarget;
-  const flat = button.getAttribute('aria-pressed') !== 'true';
-  button.setAttribute('aria-pressed', String(flat));
-  button.textContent = flat ? 'Góc nhìn 3D' : 'Nhìn từ trên';
-  plan.style.setProperty('--tilt', flat ? '0deg' : '23deg');
-  angle = 0;
-  rotate(0);
-});
-
-async function refresh(manual = false) {
-  if (refreshing || (!manual && document.hidden)) return;
-  refreshing = true;
-  try {
-    const response = await fetch('/office/tasks', {cache: 'no-store', signal: AbortSignal.timeout(8000)});
-    if (!response.ok) throw new Error('Refresh failed');
-    rooms = (await response.json()).rooms;
-    updateRooms();
-    showRoom();
-    refreshStatus.textContent = manual ? 'Đã cập nhật phiếu.' : '';
-  } catch {
-    refreshStatus.textContent = 'Chưa cập nhật được phiếu.';
-  } finally {
-    refreshing = false;
-  }
-}
-refreshButton.addEventListener('click', () => refresh(true));
-window.setInterval(refresh, 15000);
-document.addEventListener('visibilitychange', () => refresh());
-</script>
 </body>
 </html>
