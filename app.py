@@ -11,6 +11,7 @@ import activity
 import calendar_view
 import catalog
 import facebook_connection
+import office
 import page_directory
 import profiles
 import reels
@@ -18,13 +19,15 @@ import reel_media
 import reel_review
 import media_routes
 import tasks
+import trend_radar
 import workflow
 
 DATABASE = os.environ.get("AFFILIATE_DB", "affiliate.sqlite3")
 PLAYBOOK_PATH = Path(__file__).resolve().parent / "docs" / "agent-playbook.md"
 NAVIGATION = (
     '<a href="/">Hôm nay</a><a href="/pages">Fanpage</a><a href="/calendar">Lịch đăng</a>'
-    '<a href="/products">Sản phẩm</a><a href="/knowledge">Sổ tay Agent</a>'
+    '<a href="/products">Sản phẩm</a><a href="/trends">Radar xu hướng</a>'
+    '<a href="/office">Văn phòng 3D</a><a href="/knowledge">Sổ tay Agent</a>'
 )
 
 
@@ -47,6 +50,7 @@ def initialize():
         facebook_connection.initialize(db)
         catalog.initialize(db)
         workflow.initialize(db)
+        trend_radar.initialize(db)
         reels.initialize(db)
         reel_media.initialize(db)
         reel_review.initialize(db)
@@ -78,6 +82,9 @@ ACTIONS = {
     "/products/import": catalog.import_products,
     "/products/source": catalog.update_source,
     "/posts": workflow.add_post,
+    "/posts/edit": workflow.edit_post,
+    "/trends": trend_radar.create,
+    "/trends/draft": trend_radar.make_draft,
     "/reels/scenes": reels.add_scene,
     "/reels/scenes/edit": reels.edit_scene,
     "/reels/scenes/move": reels.move_scene,
@@ -97,8 +104,16 @@ def response(start_response, status, content, headers=(), content_type="text/htm
 def application(environ, start_response):
     path = environ["PATH_INFO"]
     method = environ["REQUEST_METHOD"]
+    if method == "GET" and path in ("/office", "/office/tasks"):
+        with database() as db:
+            if path == "/office":
+                return response(start_response, "200 OK", office.render(db))
+            return response(
+                start_response, "200 OK", json.dumps(office.task_snapshot(db), ensure_ascii=False),
+                [("Cache-Control", "no-store")], content_type="application/json; charset=utf-8",
+            )
     if method == "GET" and path in (
-        "/", "/knowledge", "/reels/review", "/pages", "/pages/settings", "/calendar", "/products",
+        "/", "/knowledge", "/reels/review", "/pages", "/pages/settings", "/calendar", "/products", "/trends",
     ):
         filters = parse_qs(environ.get("QUERY_STRING", ""))
         if path == "/knowledge":
@@ -134,6 +149,10 @@ def application(environ, start_response):
             page_title = "Kho sản phẩm affiliate"
             with database() as db:
                 content = catalog.directory(db, filters)
+        elif path == "/trends":
+            page_title = "Radar xu hướng"
+            with database() as db:
+                content = trend_radar.directory(db, filters)
         else:
             page_title = "Affiliate MXH"
             with database() as db:
@@ -188,6 +207,7 @@ th, td {{ border-bottom: 1px solid #d5ddd8; padding: .55rem; }}
     if method == "GET" and path == "/reels/review/video":
         return media_routes.preview_video(environ, start_response, database, response)
     if method == "POST" and path in ACTIONS:
+        fields = {}
         try:
             length = int(environ.get("CONTENT_LENGTH") or 0)
             limit = catalog.MAX_IMPORT_FORM_BYTES if path == "/products/import" else 65536
@@ -205,6 +225,12 @@ th, td {{ border-bottom: 1px solid #d5ddd8; padding: .55rem; }}
             back = '<a href="/">Về trang chính</a>'
             if path.startswith("/products"):
                 back = '<a href="/products">Về kho sản phẩm</a>'
+            elif path.startswith("/trends"):
+                back = '<a href="/trends">Về Radar xu hướng</a>'
+            elif path in ("/posts/edit", "/posts/approve"):
+                post_id = fields.get("id", "")
+                if 1 <= len(post_id) <= 19 and post_id.isascii() and post_id.isdecimal():
+                    back = f'<a href="/?post_id={post_id}#post-{post_id}">Mở lại bài viết</a>'
             return response(start_response, "400 Bad Request", f'<p>{escape(message)}</p>{back}')
         return response(start_response, "303 See Other", "", [("Location", location)])
     return response(start_response, "404 Not Found", "Không tìm thấy trang.")

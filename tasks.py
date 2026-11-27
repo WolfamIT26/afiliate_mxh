@@ -71,7 +71,7 @@ def task_card(row):
     elif row["output"]:
         notes = f'<p style="white-space: pre-wrap">{escape(row["output"])}</p>'
     return f"""
-        <article><strong>{title}</strong>
+        <article id="task-{task_id}"><strong>{title}</strong>
         <p>{page} · {owner} · {STATUS_LABELS[status]}</p>{notes}{actions}</article>
     """
 

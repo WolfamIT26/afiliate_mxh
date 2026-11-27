@@ -142,7 +142,7 @@ def apply_template(db, page_id, template):
 
 def profile_fields(page):
     return "".join(
-        f'<label>{label}<textarea name="{key}" maxlength="{limit}" rows="2">'
+        f'<label>{label}<textarea id="profile-{key}" name="{key}" maxlength="{limit}" rows="2">'
         f'{escape(page[key] or "")}</textarea></label>'
         for key, label, limit in FIELDS
     )

@@ -5,6 +5,15 @@ import profiles
 from workflow import options
 
 PAGE_SIZE = 20
+PROFILE_LABELS = {key: label for key, label, _ in profiles.FIELDS}
+ONBOARDING_GROUPS = (
+    ("Người xem và giọng văn", ("audience", "voice")),
+    ("Nhận diện hình ảnh", ("logo_url", "brand_colors")),
+    ("Kế hoạch nội dung", ("topics", "formats", "cadence", "cta")),
+    ("Nguồn tư liệu", ("sources",)),
+    ("Hướng dẫn AI và duyệt bài", ("ai_prompt", "review_rules")),
+    ("Chăm sóc khách hàng", ("support_rules",)),
+)
 
 
 def settings_url(page_id):
@@ -168,19 +177,68 @@ def directory_row(page):
     """
 
 
+def onboarding(db, page):
+    rows = []
+    for title, fields in ONBOARDING_GROUPS:
+        missing = [key for key in fields if not (page[key] or "").strip()]
+        if missing:
+            labels = ", ".join(PROFILE_LABELS[key] for key in missing)
+            rows.append((title, f"Còn trống · {labels}", f"#profile-{missing[0]}", "Bổ sung"))
+        else:
+            rows.append((title, "Đã lưu", f"#profile-{fields[0]}", "Xem hồ sơ"))
+
+    facebook_id = page["facebook_id"]
+    rows.append(("Facebook Page ID", "Đã lưu" if facebook_id else "Chưa nhập",
+                 "#facebook-page-id", "Mở thông tin Fanpage"))
+    check_status = "Lưu Page ID để kiểm tra"
+    if facebook_id:
+        check = db.execute(
+            "SELECT passed FROM facebook_checks WHERE page_id = ? AND facebook_id = ?",
+            (page["id"], facebook_id),
+        ).fetchone()
+        if check is None:
+            check_status = "Chưa kiểm tra"
+        elif check["passed"]:
+            check_status = "Đã xác minh Page ID ở lần kiểm tra gần nhất"
+        else:
+            check_status = "Lần kiểm tra gần nhất chưa đạt"
+    rows.append(("Kết nối Facebook", check_status, "#facebook", "Xem kết nối"))
+
+    body = "".join(
+        f'<tr><th scope="row">{escape(title)}</th><td>{escape(status)}</td>'
+        f'<td><a href="{target}" aria-label="{escape(f"{link} · {title}")}">{link}</a></td></tr>'
+        for title, status, target, link in rows
+    )
+    return f"""
+        <section id="page-onboarding" aria-labelledby="page-onboarding-heading">
+            <h2 id="page-onboarding-heading">Thiết lập Fanpage</h2>
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">Hạng mục</th><th scope="col">Tình trạng</th>
+                    <th scope="col">Cài đặt</th></tr></thead>
+                <tbody>{body}</tbody>
+            </table></div>
+        </section>
+    """
+
+
 def settings(db, page):
     page_id = page["id"]
     states = options(profiles.PAGE_STATES.items(), page["state"])
     templates = template_options(db, "Chọn mẫu")
     return f"""
+        {onboarding(db, page)}
         <section>
-            <a href="/?page_id={page_id}#posts">Xem bài viết</a> · <a href="/calendar?page_id={page_id}">Xem lịch đăng</a>
+            <nav aria-label="Thao tác Fanpage">
+                <a href="/?page_id={page_id}#posts">Xem bài viết</a>
+                <a href="/calendar?page_id={page_id}">Xem lịch đăng</a>
+                <a href="/trends?page_id={page_id}">Xem Radar xu hướng</a>
+            </nav>
             <form method="post" action="/pages/settings">
                 <input type="hidden" name="page_id" value="{page_id}">
                 <div class="form-row">
                     <label>Tên Fanpage <input name="name" required maxlength="120" value="{escape(page['name'])}"></label>
                     <label>Nhóm <input name="category" maxlength="80" value="{escape(page['category'])}"></label>
-                    <label>Facebook Page ID <input name="facebook_id" inputmode="numeric" maxlength="32" value="{escape(page['facebook_id'] or '')}"></label>
+                    <label>Facebook Page ID <input id="facebook-page-id" name="facebook_id" inputmode="numeric" maxlength="32" value="{escape(page['facebook_id'] or '')}"></label>
                     <label>Trạng thái <select name="state">{states}</select></label>
                 </div>
                 <p>Tạm dừng giữ lịch đã lưu và chặn lịch mới. Lưu trữ cũng chặn tạo bản nháp và phiếu mới. Có thể kích hoạt lại trong phần trạng thái.</p>
